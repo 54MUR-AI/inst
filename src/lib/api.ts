@@ -7,6 +7,8 @@ export const API = {
     isDev ? `/api/polymarket${path}` : `https://gamma-api.polymarket.com${path}`,
   fng: (path: string) =>
     isDev ? `/api/fng${path}` : `https://api.alternative.me${path}`,
+  rss: (path: string) =>
+    isDev ? `/api/rss${path}` : `https://api.rss2json.com${path}`,
 }
 
 // Stagger fetches to avoid CoinGecko rate limits (max ~10 req/min on free tier)

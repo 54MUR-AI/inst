@@ -11,6 +11,7 @@ import MarketOverview from './components/MarketOverview'
 import AiBriefing from './components/AiBriefing'
 import PolymarketFeed from './components/PolymarketFeed'
 import MacroDashboard from './components/MacroDashboard'
+import NewsFeed from './components/NewsFeed'
 import { Activity, Zap } from 'lucide-react'
 
 const ResponsiveGridLayout = WidthProvider(Responsive)
@@ -20,25 +21,28 @@ const DEFAULT_LAYOUTS = {
     { i: 'market-overview', x: 0, y: 0, w: 4, h: 4, minW: 3, minH: 3 },
     { i: 'fear-greed', x: 4, y: 0, w: 2, h: 4, minW: 2, minH: 3 },
     { i: 'ai-briefing', x: 6, y: 0, w: 6, h: 4, minW: 3, minH: 3 },
-    { i: 'polymarket', x: 0, y: 4, w: 5, h: 6, minW: 3, minH: 4 },
-    { i: 'macro', x: 5, y: 4, w: 7, h: 6, minW: 4, minH: 4 },
+    { i: 'news', x: 0, y: 4, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'polymarket', x: 4, y: 4, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'macro', x: 8, y: 4, w: 4, h: 6, minW: 3, minH: 4 },
     { i: 'crypto-heatmap', x: 0, y: 10, w: 12, h: 5, minW: 4, minH: 4 },
   ],
   md: [
     { i: 'market-overview', x: 0, y: 0, w: 5, h: 4, minW: 3, minH: 3 },
     { i: 'fear-greed', x: 5, y: 0, w: 3, h: 4, minW: 2, minH: 3 },
     { i: 'ai-briefing', x: 0, y: 4, w: 8, h: 4, minW: 3, minH: 3 },
-    { i: 'polymarket', x: 0, y: 8, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'macro', x: 4, y: 8, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'crypto-heatmap', x: 0, y: 14, w: 8, h: 5, minW: 4, minH: 4 },
+    { i: 'news', x: 0, y: 8, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'polymarket', x: 4, y: 8, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'macro', x: 0, y: 14, w: 8, h: 6, minW: 3, minH: 4 },
+    { i: 'crypto-heatmap', x: 0, y: 20, w: 8, h: 5, minW: 4, minH: 4 },
   ],
   sm: [
     { i: 'market-overview', x: 0, y: 0, w: 6, h: 4, minW: 3, minH: 3 },
     { i: 'fear-greed', x: 0, y: 4, w: 6, h: 4, minW: 2, minH: 3 },
     { i: 'ai-briefing', x: 0, y: 8, w: 6, h: 4, minW: 3, minH: 3 },
-    { i: 'polymarket', x: 0, y: 12, w: 6, h: 6, minW: 3, minH: 4 },
-    { i: 'macro', x: 0, y: 18, w: 6, h: 5, minW: 3, minH: 4 },
-    { i: 'crypto-heatmap', x: 0, y: 23, w: 6, h: 5, minW: 3, minH: 4 },
+    { i: 'news', x: 0, y: 12, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'polymarket', x: 0, y: 18, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'macro', x: 0, y: 24, w: 6, h: 5, minW: 3, minH: 4 },
+    { i: 'crypto-heatmap', x: 0, y: 29, w: 6, h: 5, minW: 3, minH: 4 },
   ],
 }
 
@@ -124,6 +128,11 @@ export default function App() {
           <div key="ai-briefing">
             <WidgetPanel title="AI Briefing" icon="brain" live>
               <AiBriefing />
+            </WidgetPanel>
+          </div>
+          <div key="news">
+            <WidgetPanel title="Breaking News" icon="newspaper" live>
+              <NewsFeed />
             </WidgetPanel>
           </div>
           <div key="polymarket">

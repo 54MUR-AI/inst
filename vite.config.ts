@@ -22,6 +22,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/fng/, ''),
       },
+      '/api/rss': {
+        target: 'https://api.rss2json.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/rss/, ''),
+      },
     },
   },
   build: {
