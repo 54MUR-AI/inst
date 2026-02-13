@@ -21,6 +21,7 @@ import PriceAlerts from './components/PriceAlerts'
 import SectorPerformance from './components/SectorPerformance'
 import CurrencyStrength from './components/CurrencyStrength'
 import PortfolioTracker from './components/PortfolioTracker'
+import MarketSessions from './components/MarketSessions'
 import NewsFeed from './components/NewsFeed'
 import GlobalEquities from './components/GlobalEquities'
 import CommoditiesMetals from './components/CommoditiesMetals'
@@ -54,6 +55,7 @@ const DEFAULT_LAYOUTS = {
     { i: 'sector-performance', x: 8, y: 29, w: 4, h: 6, minW: 3, minH: 4 },
     { i: 'currency-strength', x: 0, y: 35, w: 4, h: 5, minW: 3, minH: 4 },
     { i: 'portfolio', x: 4, y: 35, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'market-sessions', x: 8, y: 35, w: 4, h: 6, minW: 3, minH: 4 },
   ],
   md: [
     { i: 'global-equities', x: 0, y: 0, w: 4, h: 5, minW: 3, minH: 4 },
@@ -75,6 +77,7 @@ const DEFAULT_LAYOUTS = {
     { i: 'sector-performance', x: 0, y: 57, w: 8, h: 5, minW: 3, minH: 4 },
     { i: 'currency-strength', x: 0, y: 62, w: 4, h: 5, minW: 3, minH: 4 },
     { i: 'portfolio', x: 4, y: 62, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'market-sessions', x: 0, y: 68, w: 8, h: 5, minW: 3, minH: 4 },
   ],
   sm: [
     { i: 'global-equities', x: 0, y: 0, w: 6, h: 5, minW: 3, minH: 4 },
@@ -96,6 +99,7 @@ const DEFAULT_LAYOUTS = {
     { i: 'sector-performance', x: 0, y: 87, w: 6, h: 5, minW: 3, minH: 4 },
     { i: 'currency-strength', x: 0, y: 92, w: 6, h: 5, minW: 3, minH: 4 },
     { i: 'portfolio', x: 0, y: 97, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'market-sessions', x: 0, y: 103, w: 6, h: 5, minW: 3, minH: 4 },
   ],
 }
 
@@ -287,6 +291,11 @@ export default function App() {
           {isVisible('portfolio') && <div key="portfolio">
             <WidgetPanel title="Portfolio" icon="pie-chart" live>
               <PortfolioTracker />
+            </WidgetPanel>
+          </div>}
+          {isVisible('market-sessions') && <div key="market-sessions">
+            <WidgetPanel title="Market Sessions" icon="clock" live>
+              <MarketSessions />
             </WidgetPanel>
           </div>}
         </ResponsiveGridLayout>

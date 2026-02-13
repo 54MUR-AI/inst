@@ -30,6 +30,7 @@ export const WIDGETS: WidgetDef[] = [
   { id: 'sector-performance', label: 'Sector Performance', icon: 'layers', defaultVisible: true },
   { id: 'currency-strength', label: 'Currency Strength', icon: 'banknote', defaultVisible: true },
   { id: 'portfolio', label: 'Portfolio Tracker', icon: 'pie-chart', defaultVisible: true },
+  { id: 'market-sessions', label: 'Market Sessions', icon: 'clock', defaultVisible: true },
 ]
 
 // Device class based on screen width — gives different storage per device type
