@@ -166,6 +166,57 @@ export function calcGSR(quotes: Map<string, YahooQuote>): number | null {
   return gold.regularMarketPrice / silver.regularMarketPrice
 }
 
+// ── OHLC Candlestick data ──
+
+export interface OHLCBar {
+  time: number  // Unix timestamp (seconds)
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+let ohlcCache: Map<string, { data: OHLCBar[]; ts: number }> = new Map()
+const OHLC_CACHE_TTL = 120_000 // 2 minutes
+
+export async function fetchOHLC(
+  symbol: string,
+  interval: string = '1d',
+  range: string = '6mo'
+): Promise<OHLCBar[]> {
+  const cacheKey = `${symbol}-${interval}-${range}`
+  const cached = ohlcCache.get(cacheKey)
+  if (cached && Date.now() - cached.ts < OHLC_CACHE_TTL) return cached.data
+
+  try {
+    const url = API.yahoo(`/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${interval}&range=${range}`)
+    const res = await fetch(url)
+    if (!res.ok) return cached?.data || []
+    const json = await res.json()
+
+    const result = json.chart?.result?.[0]
+    if (!result) return []
+
+    const timestamps: number[] = result.timestamp || []
+    const q = result.indicators?.quote?.[0]
+    if (!q || !timestamps.length) return []
+
+    const bars: OHLCBar[] = []
+    for (let i = 0; i < timestamps.length; i++) {
+      const o = q.open?.[i], h = q.high?.[i], l = q.low?.[i], c = q.close?.[i], v = q.volume?.[i]
+      if (o != null && h != null && l != null && c != null) {
+        bars.push({ time: timestamps[i], open: o, high: h, low: l, close: c, volume: v || 0 })
+      }
+    }
+
+    ohlcCache.set(cacheKey, { data: bars, ts: Date.now() })
+    return bars
+  } catch {
+    return cached?.data || []
+  }
+}
+
 // ── Sparkline data (5-day hourly closes) ──
 
 let sparkCache: { data: Map<string, number[]>; ts: number } = { data: new Map(), ts: 0 }
