@@ -26,6 +26,7 @@ export const WIDGETS: WidgetDef[] = [
   { id: 'candlestick', label: 'Charts', icon: 'candlestick', defaultVisible: true },
   { id: 'crypto-heatmap', label: 'Crypto Heatmap', icon: 'grid', defaultVisible: true },
   { id: 'watchlist', label: 'Watchlist', icon: 'star', defaultVisible: true },
+  { id: 'price-alerts', label: 'Price Alerts', icon: 'bell', defaultVisible: true },
 ]
 
 // Device class based on screen width — gives different storage per device type
