@@ -4,6 +4,7 @@ import { API, fetchCoinGecko } from '../lib/api'
 import { fetchQuotes, INDICES, METALS, ENERGY, FOREX, BONDS, calcGSR } from '../lib/yahooFinance'
 import type { YahooQuote } from '../lib/yahooFinance'
 import ollamaProxy from '../lib/ollamaProxy'
+import { scrapeMultiple, checkHealth } from '../lib/scrpBridge'
 
 interface BriefingItem {
   type: 'trend' | 'alert' | 'insight'
@@ -27,7 +28,7 @@ interface MarketSnapshot {
   gsr: number | null
   fng: { value: number; classification: string } | null
   crypto: { mcapChange: number; btcDom: number; totalVolume: number; activeCryptos: number } | null
-  headlines: string[]
+  headlines: { title: string; link: string; source: string }[]
 }
 
 async function gatherMarketData(): Promise<MarketSnapshot> {
@@ -87,7 +88,7 @@ async function gatherMarketData(): Promise<MarketSnapshot> {
   return { indices, metals, energy, forex, bonds, gsr: calcGSR(quotes), fng, crypto, headlines }
 }
 
-async function fetchNewsHeadlines(): Promise<string[]> {
+async function fetchNewsHeadlines(): Promise<{ title: string; link: string; source: string }[]> {
   const feeds = [
     { url: 'https://www.coindesk.com/arc/outboundfeeds/rss/', source: 'CoinDesk' },
     { url: 'https://feeds.marketwatch.com/marketwatch/topstories/', source: 'MarketWatch' },
@@ -100,10 +101,14 @@ async function fetchNewsHeadlines(): Promise<string[]> {
       if (!res.ok) return []
       const j = await res.json()
       if (j.status !== 'ok' || !j.items) return []
-      return j.items.slice(0, 3).map((it: { title: string }) => `[${f.source}] ${it.title}`)
+      return j.items.slice(0, 3).map((it: { title: string; link: string }) => ({
+        title: it.title,
+        link: it.link,
+        source: f.source,
+      }))
     })
   )
-  const all: string[] = []
+  const all: { title: string; link: string; source: string }[] = []
   for (const r of results) if (r.status === 'fulfilled') all.push(...r.value)
   return all.slice(0, 12)
 }
@@ -218,7 +223,7 @@ function generateLocalInsights(snap: MarketSnapshot): BriefingItem[] {
     items.push({
       type: 'insight',
       title: 'Top Headlines',
-      body: snap.headlines.slice(0, 4).map(h => h.replace(/^\[.*?\]\s*/, '• ')).join(' '),
+      body: snap.headlines.slice(0, 4).map(h => `• [${h.source}] ${h.title}`).join(' '),
       timestamp: now,
     })
   }
@@ -293,7 +298,7 @@ function buildOllamaContext(snap: MarketSnapshot): string {
 
   // Headlines
   if (snap.headlines.length > 0) {
-    sections.push('BREAKING NEWS HEADLINES:\n' + snap.headlines.map(h => `  ${h}`).join('\n'))
+    sections.push('BREAKING NEWS HEADLINES:\n' + snap.headlines.map(h => `  [${h.source}] ${h.title}`).join('\n'))
   }
 
   return sections.join('\n\n')
@@ -352,8 +357,31 @@ export default function AiBriefing({ selectedModel }: AiBriefingProps) {
     if (!ollamaProxy.isAvailable || !snapshot) return
     setDeepLoading(true)
 
-    const context = buildOllamaContext(snapshot)
+    let context = buildOllamaContext(snapshot)
     const model = selectedModel || ollamaProxy.availableModels[0] || 'llama3:latest'
+
+    // Try to scrape top news articles via SCRP for full content
+    try {
+      const scrpUp = await checkHealth()
+      if (scrpUp && snapshot.headlines.length > 0) {
+        const topUrls = snapshot.headlines.slice(0, 4).map(h => h.link).filter(Boolean)
+        if (topUrls.length > 0) {
+          const scraped = await scrapeMultiple(topUrls, { summarize: false })
+          const articleTexts: string[] = []
+          scraped.forEach((result, url) => {
+            if (result.success && result.content?.content) {
+              const preview = result.content.content.slice(0, 1500)
+              articleTexts.push(`ARTICLE: ${result.content.title || url}\n${preview}`)
+            }
+          })
+          if (articleTexts.length > 0) {
+            context += '\n\nSCRAPED ARTICLE CONTENT (via SCRP):\n' + articleTexts.join('\n\n---\n\n')
+          }
+        }
+      }
+    } catch {
+      // SCRP unavailable — continue with headlines only
+    }
 
     try {
       const result = await ollamaProxy.chat(model, [
