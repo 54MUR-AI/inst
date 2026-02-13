@@ -80,8 +80,8 @@ class OllamaProxyService {
 
       const timeout = setTimeout(() => {
         window.removeEventListener('message', responseHandler)
-        reject(new Error('Ollama request timeout (60s)'))
-      }, 60000)
+        reject(new Error('Ollama request timeout (5m)'))
+      }, 300000)
 
       window.addEventListener('message', responseHandler)
 
