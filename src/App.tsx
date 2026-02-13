@@ -18,6 +18,7 @@ import EconomicCalendar from './components/EconomicCalendar'
 import CandlestickChart from './components/CandlestickChart'
 import Watchlist from './components/Watchlist'
 import PriceAlerts from './components/PriceAlerts'
+import SectorPerformance from './components/SectorPerformance'
 import NewsFeed from './components/NewsFeed'
 import GlobalEquities from './components/GlobalEquities'
 import CommoditiesMetals from './components/CommoditiesMetals'
@@ -48,6 +49,7 @@ const DEFAULT_LAYOUTS = {
     { i: 'crypto-heatmap', x: 8, y: 22, w: 4, h: 7, minW: 4, minH: 4 },
     { i: 'watchlist', x: 0, y: 29, w: 4, h: 6, minW: 3, minH: 4 },
     { i: 'price-alerts', x: 4, y: 29, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'sector-performance', x: 8, y: 29, w: 4, h: 6, minW: 3, minH: 4 },
   ],
   md: [
     { i: 'global-equities', x: 0, y: 0, w: 4, h: 5, minW: 3, minH: 4 },
@@ -66,6 +68,7 @@ const DEFAULT_LAYOUTS = {
     { i: 'crypto-heatmap', x: 0, y: 46, w: 8, h: 5, minW: 4, minH: 4 },
     { i: 'watchlist', x: 0, y: 51, w: 4, h: 6, minW: 3, minH: 4 },
     { i: 'price-alerts', x: 4, y: 51, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'sector-performance', x: 0, y: 57, w: 8, h: 5, minW: 3, minH: 4 },
   ],
   sm: [
     { i: 'global-equities', x: 0, y: 0, w: 6, h: 5, minW: 3, minH: 4 },
@@ -84,6 +87,7 @@ const DEFAULT_LAYOUTS = {
     { i: 'crypto-heatmap', x: 0, y: 70, w: 6, h: 5, minW: 3, minH: 4 },
     { i: 'watchlist', x: 0, y: 75, w: 6, h: 6, minW: 3, minH: 4 },
     { i: 'price-alerts', x: 0, y: 81, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'sector-performance', x: 0, y: 87, w: 6, h: 5, minW: 3, minH: 4 },
   ],
 }
 
@@ -260,6 +264,11 @@ export default function App() {
           {isVisible('price-alerts') && <div key="price-alerts">
             <WidgetPanel title="Price Alerts" icon="bell" live>
               <PriceAlerts />
+            </WidgetPanel>
+          </div>}
+          {isVisible('sector-performance') && <div key="sector-performance">
+            <WidgetPanel title="Sector Performance" icon="layers" live>
+              <SectorPerformance />
             </WidgetPanel>
           </div>}
         </ResponsiveGridLayout>
