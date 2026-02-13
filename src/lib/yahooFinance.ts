@@ -1,7 +1,7 @@
 /**
  * Yahoo Finance quote fetcher
- * Uses the v8 quote endpoint — free, no API key needed.
- * Batches multiple symbols into a single request.
+ * Uses the v8/finance/chart endpoint on query2 — free, no API key.
+ * Fetches each symbol individually via Promise.allSettled.
  */
 
 import { API } from './api'
@@ -18,12 +18,55 @@ export interface YahooQuote {
   regularMarketDayLow: number
   regularMarketVolume: number
   currency: string
-  marketState: string // PRE, REGULAR, POST, CLOSED
-  quoteType: string   // EQUITY, INDEX, CURRENCY, FUTURE, MUTUALFUND
+  marketState: string
+  quoteType: string
 }
 
 let cache: { data: Map<string, YahooQuote>; ts: number } = { data: new Map(), ts: 0 }
-const CACHE_TTL = 60_000 // 1 minute
+const CACHE_TTL = 90_000 // 90 seconds
+
+async function fetchSingleChart(symbol: string): Promise<YahooQuote | null> {
+  try {
+    const url = API.yahoo(`/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`)
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const json = await res.json()
+
+    const result = json.chart?.result?.[0]
+    if (!result) return null
+
+    const meta = result.meta
+    const price = meta.regularMarketPrice ?? 0
+    const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? price
+    const change = price - prevClose
+    const changePct = prevClose !== 0 ? (change / prevClose) * 100 : 0
+
+    // Extract day high/low from indicators if available
+    const indicators = result.indicators?.quote?.[0]
+    const dayHigh = indicators?.high?.[indicators.high.length - 1] ?? meta.regularMarketDayHigh ?? price
+    const dayLow = indicators?.low?.[indicators.low.length - 1] ?? meta.regularMarketDayLow ?? price
+    const dayOpen = indicators?.open?.[indicators.open.length - 1] ?? price
+    const dayVol = indicators?.volume?.[indicators.volume.length - 1] ?? 0
+
+    return {
+      symbol: meta.symbol || symbol,
+      shortName: meta.shortName || meta.symbol || symbol,
+      regularMarketPrice: price,
+      regularMarketChange: change,
+      regularMarketChangePercent: changePct,
+      regularMarketPreviousClose: prevClose,
+      regularMarketOpen: dayOpen,
+      regularMarketDayHigh: dayHigh,
+      regularMarketDayLow: dayLow,
+      regularMarketVolume: dayVol,
+      currency: meta.currency || 'USD',
+      marketState: meta.marketState || 'CLOSED',
+      quoteType: meta.instrumentType || meta.quoteType || 'EQUITY',
+    }
+  } catch {
+    return null
+  }
+}
 
 export async function fetchQuotes(symbols: string[]): Promise<Map<string, YahooQuote>> {
   const now = Date.now()
@@ -33,40 +76,24 @@ export async function fetchQuotes(symbols: string[]): Promise<Map<string, YahooQ
     return cache.data
   }
 
+  // Only fetch symbols not in cache (or all if cache expired)
+  const toFetch = now - cache.ts >= CACHE_TTL ? symbols : symbols.filter(s => !cache.data.has(s))
+
   try {
-    const url = API.yahoo(`/v7/finance/quote?symbols=${symbols.join(',')}&fields=shortName,regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketPreviousClose,regularMarketOpen,regularMarketDayHigh,regularMarketDayLow,regularMarketVolume,currency,marketState,quoteType`)
-    const res = await fetch(url)
-    if (!res.ok) throw new Error(`Yahoo ${res.status}`)
-    const json = await res.json()
+    const results = await Promise.allSettled(toFetch.map(s => fetchSingleChart(s)))
 
-    const quotes = new Map<string, YahooQuote>()
-    for (const q of json.quoteResponse?.result || []) {
-      quotes.set(q.symbol, {
-        symbol: q.symbol,
-        shortName: q.shortName || q.symbol,
-        regularMarketPrice: q.regularMarketPrice ?? 0,
-        regularMarketChange: q.regularMarketChange ?? 0,
-        regularMarketChangePercent: q.regularMarketChangePercent ?? 0,
-        regularMarketPreviousClose: q.regularMarketPreviousClose ?? 0,
-        regularMarketOpen: q.regularMarketOpen ?? 0,
-        regularMarketDayHigh: q.regularMarketDayHigh ?? 0,
-        regularMarketDayLow: q.regularMarketDayLow ?? 0,
-        regularMarketVolume: q.regularMarketVolume ?? 0,
-        currency: q.currency || 'USD',
-        marketState: q.marketState || 'CLOSED',
-        quoteType: q.quoteType || 'EQUITY',
-      })
+    for (let i = 0; i < toFetch.length; i++) {
+      const r = results[i]
+      if (r.status === 'fulfilled' && r.value) {
+        cache.data.set(toFetch[i], r.value)
+      }
     }
-
-    // Merge into cache
-    for (const [k, v] of quotes) cache.data.set(k, v)
     cache.ts = now
-
-    return cache.data
   } catch (err) {
-    console.warn('[Yahoo Finance] Fetch failed:', err)
-    return cache.data // return stale cache on error
+    console.warn('[Yahoo Finance] Batch fetch failed:', err)
   }
+
+  return cache.data
 }
 
 // ── Symbol groups ──
