@@ -16,6 +16,7 @@ import PolymarketFeed from './components/PolymarketFeed'
 import MacroDashboard from './components/MacroDashboard'
 import EconomicCalendar from './components/EconomicCalendar'
 import CandlestickChart from './components/CandlestickChart'
+import Watchlist from './components/Watchlist'
 import NewsFeed from './components/NewsFeed'
 import GlobalEquities from './components/GlobalEquities'
 import CommoditiesMetals from './components/CommoditiesMetals'
@@ -44,6 +45,7 @@ const DEFAULT_LAYOUTS = {
     { i: 'ai-predictions', x: 8, y: 15, w: 4, h: 7, minW: 4, minH: 5 },
     { i: 'candlestick', x: 0, y: 22, w: 8, h: 7, minW: 4, minH: 5 },
     { i: 'crypto-heatmap', x: 8, y: 22, w: 4, h: 7, minW: 4, minH: 4 },
+    { i: 'watchlist', x: 0, y: 29, w: 4, h: 6, minW: 3, minH: 4 },
   ],
   md: [
     { i: 'global-equities', x: 0, y: 0, w: 4, h: 5, minW: 3, minH: 4 },
@@ -60,6 +62,7 @@ const DEFAULT_LAYOUTS = {
     { i: 'ai-predictions', x: 0, y: 32, w: 8, h: 7, minW: 4, minH: 5 },
     { i: 'candlestick', x: 0, y: 39, w: 8, h: 7, minW: 4, minH: 5 },
     { i: 'crypto-heatmap', x: 0, y: 46, w: 8, h: 5, minW: 4, minH: 4 },
+    { i: 'watchlist', x: 0, y: 51, w: 4, h: 6, minW: 3, minH: 4 },
   ],
   sm: [
     { i: 'global-equities', x: 0, y: 0, w: 6, h: 5, minW: 3, minH: 4 },
@@ -76,6 +79,7 @@ const DEFAULT_LAYOUTS = {
     { i: 'ai-predictions', x: 0, y: 56, w: 6, h: 7, minW: 3, minH: 5 },
     { i: 'candlestick', x: 0, y: 63, w: 6, h: 7, minW: 3, minH: 5 },
     { i: 'crypto-heatmap', x: 0, y: 70, w: 6, h: 5, minW: 3, minH: 4 },
+    { i: 'watchlist', x: 0, y: 75, w: 6, h: 6, minW: 3, minH: 4 },
   ],
 }
 
@@ -242,6 +246,11 @@ export default function App() {
           {isVisible('crypto-heatmap') && <div key="crypto-heatmap">
             <WidgetPanel title="Crypto Heatmap" icon="grid">
               <CryptoHeatmap />
+            </WidgetPanel>
+          </div>}
+          {isVisible('watchlist') && <div key="watchlist">
+            <WidgetPanel title="Watchlist" icon="star" live>
+              <Watchlist />
             </WidgetPanel>
           </div>}
         </ResponsiveGridLayout>
