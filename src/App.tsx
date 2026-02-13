@@ -13,6 +13,7 @@ import PolymarketFeed from './components/PolymarketFeed'
 import MacroDashboard from './components/MacroDashboard'
 import NewsFeed from './components/NewsFeed'
 import { Activity, Zap } from 'lucide-react'
+import { setAuthToken } from './lib/ldgrBridge'
 
 const ResponsiveGridLayout = WidthProvider(Responsive)
 
@@ -54,7 +55,7 @@ export default function App() {
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'RMG_AUTH_TOKEN') {
-        // Store auth token for API calls
+        // Store auth token and initialize LDGR bridge
         try {
           const parsed = JSON.parse(event.data.authToken)
           if (parsed.access_token) {
@@ -63,6 +64,7 @@ export default function App() {
         } catch {
           // ignore parse errors
         }
+        setAuthToken(event.data.authToken)
       }
       if (event.data?.type === 'RMG_TOGGLE_SETTINGS') {
         // TODO: open settings panel

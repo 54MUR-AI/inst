@@ -1,0 +1,153 @@
+/**
+ * LDGR Bridge for INST
+ * Fetches encrypted API keys from Supabase and decrypts them client-side
+ * using the same AES-256-GCM + PBKDF2 scheme as RMG/LDGR.
+ */
+
+import { getSupabase } from './supabase'
+
+// ── Decryption (mirrors RMG/src/lib/ldgr/encryption.ts) ──
+
+async function deriveKey(userId: string, purpose: string): Promise<CryptoKey> {
+  const encoder = new TextEncoder()
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(userId),
+    'PBKDF2',
+    false,
+    ['deriveBits', 'deriveKey']
+  )
+  const salt = encoder.encode(`ldgr:${purpose}:${userId}`)
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['decrypt']
+  )
+}
+
+async function decryptText(encryptedBase64: string, userId: string, purpose: string): Promise<string> {
+  const combined = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0))
+  const iv = combined.slice(0, 12)
+  const encrypted = combined.slice(12)
+  const key = await deriveKey(userId, purpose)
+  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, encrypted)
+  return new TextDecoder().decode(decrypted)
+}
+
+// ── Auth state ──
+
+interface AuthState {
+  accessToken: string | null
+  userId: string | null
+}
+
+const auth: AuthState = {
+  accessToken: null,
+  userId: null,
+}
+
+/** Called when RMG sends an auth token via postMessage */
+export function setAuthToken(rawToken: string) {
+  try {
+    const parsed = JSON.parse(rawToken)
+    if (parsed.access_token) {
+      auth.accessToken = parsed.access_token
+      // Decode JWT to get user ID
+      const payload = JSON.parse(atob(parsed.access_token.split('.')[1]))
+      auth.userId = payload.sub || null
+    }
+  } catch {
+    // ignore parse errors
+  }
+}
+
+export function getAuth(): Readonly<AuthState> {
+  return auth
+}
+
+export function isAuthenticated(): boolean {
+  return !!auth.accessToken && !!auth.userId
+}
+
+// ── API Key fetching ──
+
+export interface LdgrApiKey {
+  id: string
+  service_name: string
+  key_name: string
+  encrypted_key: string
+  is_active: boolean
+}
+
+// In-memory cache: service_name → decrypted key
+const keyCache = new Map<string, string>()
+
+/**
+ * Get a decrypted API key for a given service.
+ * Returns null if not authenticated or no key found.
+ */
+export async function getApiKey(serviceName: string): Promise<string | null> {
+  if (!auth.accessToken || !auth.userId) return null
+
+  // Check cache first
+  const cached = keyCache.get(serviceName)
+  if (cached) return cached
+
+  try {
+    const supabase = getSupabase(auth.accessToken)
+    const { data, error } = await supabase
+      .from('api_keys')
+      .select('id, service_name, key_name, encrypted_key, is_active')
+      .eq('user_id', auth.userId)
+      .eq('service_name', serviceName)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (error || !data) return null
+
+    // Decrypt
+    const decrypted = await decryptText(data.encrypted_key, auth.userId, 'apikeys')
+    keyCache.set(serviceName, decrypted)
+
+    // Update last_used_at
+    await supabase
+      .from('api_keys')
+      .update({ last_used_at: new Date().toISOString() })
+      .eq('id', data.id)
+
+    return decrypted
+  } catch (err) {
+    console.warn(`[LDGR Bridge] Failed to get key for ${serviceName}:`, err)
+    return null
+  }
+}
+
+/**
+ * List all available API key service names for the current user.
+ */
+export async function listAvailableServices(): Promise<string[]> {
+  if (!auth.accessToken || !auth.userId) return []
+
+  try {
+    const supabase = getSupabase(auth.accessToken)
+    const { data, error } = await supabase
+      .from('api_keys')
+      .select('service_name')
+      .eq('user_id', auth.userId)
+      .eq('is_active', true)
+
+    if (error || !data) return []
+    return [...new Set(data.map(d => d.service_name))]
+  } catch {
+    return []
+  }
+}
+
+/** Clear the key cache (e.g. on auth change) */
+export function clearKeyCache() {
+  keyCache.clear()
+}
