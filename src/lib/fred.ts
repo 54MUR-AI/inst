@@ -144,6 +144,50 @@ export async function fetchFredData(
 }
 
 /**
+ * Fetch the latest observation for a FRED series near a given date.
+ * Used by Economic Calendar to show actual values after release.
+ * Returns { value, date } or null.
+ */
+export async function fetchFredObservationNear(
+  seriesId: string,
+  targetDate: string // YYYY-MM-DD
+): Promise<{ value: number; date: string } | null> {
+  const apiKey = await getFredKey()
+  if (!apiKey) return null
+
+  try {
+    // Fetch observations in a window around the target date
+    const start = new Date(targetDate + 'T00:00:00')
+    start.setMonth(start.getMonth() - 2)
+    const end = new Date(targetDate + 'T00:00:00')
+    end.setMonth(end.getMonth() + 1)
+
+    const url = `${FRED_BASE}/series/observations?series_id=${seriesId}&api_key=${apiKey}&file_type=json&observation_start=${start.toISOString().split('T')[0]}&observation_end=${end.toISOString().split('T')[0]}&sort_order=desc&limit=2`
+    const res = await fetch(url)
+    if (!res.ok) return null
+
+    const json = await res.json()
+    const obs = (json.observations || [])
+      .filter((o: any) => o.value !== '.')
+      .map((o: any) => ({ date: o.date, value: parseFloat(o.value) }))
+      .filter((o: any) => !isNaN(o.value))
+
+    if (obs.length === 0) return null
+    return obs[0] // most recent observation near the target date
+  } catch {
+    return null
+  }
+}
+
+// FRED series IDs mapped to calendar event categories
+export const FRED_CALENDAR_SERIES: Record<string, { seriesId: string; format: (v: number) => string }> = {
+  cpi: { seriesId: 'CPIAUCSL', format: (v) => `${v.toFixed(1)}` },
+  jobs: { seriesId: 'UNRATE', format: (v) => `${v.toFixed(1)}%` },
+  gdp: { seriesId: 'GDP', format: (v) => `$${(v / 1000).toFixed(2)}T` },
+  fomc: { seriesId: 'DFF', format: (v) => `${v.toFixed(2)}%` },
+}
+
+/**
  * Build a context string of FRED data for the AI prediction engine.
  */
 export async function buildFredContext(): Promise<string | null> {

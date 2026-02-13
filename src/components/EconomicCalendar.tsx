@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Calendar, Clock, AlertTriangle, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { fetchFredObservationNear, FRED_CALENDAR_SERIES, hasFredKey } from '../lib/fred'
 
 interface EconEvent {
   date: string        // ISO date
@@ -154,6 +155,8 @@ function getCountdownText(days: number): { text: string; urgent: boolean } {
 export default function EconomicCalendar() {
   const [filter, setFilter] = useState<FilterCategory>('all')
   const [events, setEvents] = useState<(EconEvent & { daysAway: number })[]>([])
+  const [fredValues, setFredValues] = useState<Map<string, string>>(new Map())
+  const [hasFred, setHasFred] = useState(false)
 
   useEffect(() => {
     // Get events from 7 days ago to 90 days ahead
@@ -166,6 +169,33 @@ export default function EconomicCalendar() {
       .sort((a, b) => a.daysAway - b.daysAway)
 
     setEvents(upcoming)
+
+    // Fetch FRED actual values for past events (if key available)
+    const fetchActuals = async () => {
+      const keyAvailable = await hasFredKey()
+      setHasFred(keyAvailable)
+      if (!keyAvailable) return
+
+      const pastEvents = upcoming.filter(
+        e => e.daysAway < 0 && FRED_CALENDAR_SERIES[e.category]
+      )
+      if (pastEvents.length === 0) return
+
+      const vals = new Map<string, string>()
+      // Batch fetch — limit to 6 to avoid rate limits
+      const toFetch = pastEvents.slice(0, 6)
+      await Promise.allSettled(
+        toFetch.map(async (e) => {
+          const cfg = FRED_CALENDAR_SERIES[e.category]
+          const obs = await fetchFredObservationNear(cfg.seriesId, e.date)
+          if (obs) {
+            vals.set(`${e.category}-${e.date}`, cfg.format(obs.value))
+          }
+        })
+      )
+      setFredValues(vals)
+    }
+    fetchActuals()
   }, [])
 
   const filtered = filter === 'all' ? events : events.filter(e => e.category === filter)
@@ -201,7 +231,14 @@ export default function EconomicCalendar() {
 
         {/* Event info */}
         <div className="flex-1 min-w-0">
-          <div className="text-[11px] text-white font-medium truncate">{event.title}</div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-white font-medium truncate">{event.title}</span>
+            {fredValues.get(`${event.category}-${event.date}`) && (
+              <span className="text-[9px] font-mono font-bold text-emerald-400 flex-shrink-0">
+                {fredValues.get(`${event.category}-${event.date}`)}
+              </span>
+            )}
+          </div>
           <div className="text-[9px] text-samurai-steel font-mono">
             {formatDate(event.date)} · {event.time}
           </div>
@@ -286,7 +323,7 @@ export default function EconomicCalendar() {
         <div className="flex items-center gap-1.5">
           <Clock className="w-3 h-3 text-samurai-steel/50" />
           <span className="text-[8px] text-samurai-steel/50 font-mono">
-            {filtered.filter(e => e.daysAway >= 0).length} upcoming events
+            {filtered.filter(e => e.daysAway >= 0).length} upcoming{hasFred ? ' · FRED' : ''}
           </span>
         </div>
         <div className="flex items-center gap-2">
