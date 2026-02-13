@@ -1,14 +1,9 @@
-const isDev = import.meta.env.DEV
-
+// Proxy paths work in both dev (Vite proxy) and prod (Netlify _redirects)
 export const API = {
-  coingecko: (path: string) =>
-    isDev ? `/api/coingecko${path}` : `https://api.coingecko.com${path}`,
-  polymarket: (path: string) =>
-    isDev ? `/api/polymarket${path}` : `https://gamma-api.polymarket.com${path}`,
-  fng: (path: string) =>
-    isDev ? `/api/fng${path}` : `https://api.alternative.me${path}`,
-  rss: (path: string) =>
-    isDev ? `/api/rss${path}` : `https://api.rss2json.com${path}`,
+  coingecko: (path: string) => `/api/coingecko${path}`,
+  polymarket: (path: string) => `/api/polymarket${path}`,
+  fng: (path: string) => `/api/fng${path}`,
+  rss: (path: string) => `/api/rss${path}`,
 }
 
 // Stagger fetches to avoid CoinGecko rate limits (max ~10 req/min on free tier)
