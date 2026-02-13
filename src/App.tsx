@@ -14,6 +14,7 @@ import AiPredictions from './components/AiPredictions'
 import TopMovers from './components/TopMovers'
 import PolymarketFeed from './components/PolymarketFeed'
 import MacroDashboard from './components/MacroDashboard'
+import EconomicCalendar from './components/EconomicCalendar'
 import NewsFeed from './components/NewsFeed'
 import GlobalEquities from './components/GlobalEquities'
 import CommoditiesMetals from './components/CommoditiesMetals'
@@ -36,8 +37,9 @@ const DEFAULT_LAYOUTS = {
     { i: 'news', x: 0, y: 9, w: 4, h: 6, minW: 3, minH: 4 },
     { i: 'polymarket', x: 4, y: 9, w: 4, h: 6, minW: 3, minH: 4 },
     { i: 'macro', x: 8, y: 9, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'top-movers', x: 0, y: 15, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'ai-predictions', x: 4, y: 15, w: 8, h: 7, minW: 4, minH: 5 },
+    { i: 'econ-calendar', x: 0, y: 15, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'top-movers', x: 4, y: 15, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'ai-predictions', x: 8, y: 15, w: 4, h: 7, minW: 4, minH: 5 },
     { i: 'crypto-heatmap', x: 0, y: 22, w: 12, h: 5, minW: 4, minH: 4 },
   ],
   md: [
@@ -50,9 +52,10 @@ const DEFAULT_LAYOUTS = {
     { i: 'news', x: 0, y: 14, w: 4, h: 6, minW: 3, minH: 4 },
     { i: 'polymarket', x: 4, y: 14, w: 4, h: 6, minW: 3, minH: 4 },
     { i: 'macro', x: 0, y: 20, w: 8, h: 6, minW: 3, minH: 4 },
-    { i: 'top-movers', x: 0, y: 26, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'ai-predictions', x: 4, y: 26, w: 4, h: 7, minW: 4, minH: 5 },
-    { i: 'crypto-heatmap', x: 0, y: 33, w: 8, h: 5, minW: 4, minH: 4 },
+    { i: 'econ-calendar', x: 0, y: 26, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'top-movers', x: 4, y: 26, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'ai-predictions', x: 0, y: 32, w: 8, h: 7, minW: 4, minH: 5 },
+    { i: 'crypto-heatmap', x: 0, y: 39, w: 8, h: 5, minW: 4, minH: 4 },
   ],
   sm: [
     { i: 'global-equities', x: 0, y: 0, w: 6, h: 5, minW: 3, minH: 4 },
@@ -64,9 +67,10 @@ const DEFAULT_LAYOUTS = {
     { i: 'news', x: 0, y: 27, w: 6, h: 6, minW: 3, minH: 4 },
     { i: 'polymarket', x: 0, y: 33, w: 6, h: 6, minW: 3, minH: 4 },
     { i: 'macro', x: 0, y: 39, w: 6, h: 5, minW: 3, minH: 4 },
-    { i: 'top-movers', x: 0, y: 44, w: 6, h: 6, minW: 3, minH: 4 },
-    { i: 'ai-predictions', x: 0, y: 50, w: 6, h: 7, minW: 3, minH: 5 },
-    { i: 'crypto-heatmap', x: 0, y: 57, w: 6, h: 5, minW: 3, minH: 4 },
+    { i: 'econ-calendar', x: 0, y: 44, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'top-movers', x: 0, y: 50, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'ai-predictions', x: 0, y: 56, w: 6, h: 7, minW: 3, minH: 5 },
+    { i: 'crypto-heatmap', x: 0, y: 63, w: 6, h: 5, minW: 3, minH: 4 },
   ],
 }
 
@@ -188,6 +192,11 @@ export default function App() {
           <div key="macro">
             <WidgetPanel title="Macro Dashboard" icon="chart">
               <MacroDashboard />
+            </WidgetPanel>
+          </div>
+          <div key="econ-calendar">
+            <WidgetPanel title="Economic Calendar" icon="calendar">
+              <EconomicCalendar />
             </WidgetPanel>
           </div>
           <div key="top-movers">
