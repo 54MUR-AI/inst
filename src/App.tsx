@@ -15,6 +15,8 @@ import NewsFeed from './components/NewsFeed'
 import GlobalEquities from './components/GlobalEquities'
 import CommoditiesMetals from './components/CommoditiesMetals'
 import ForexBonds from './components/ForexBonds'
+import SettingsPanel from './components/SettingsPanel'
+import type { AiSettings } from './components/SettingsPanel'
 import { Activity, Zap } from 'lucide-react'
 import { setAuthToken } from './lib/ldgrBridge'
 
@@ -62,6 +64,7 @@ const DEFAULT_LAYOUTS = {
 export default function App() {
   const [layouts, setLayouts] = useState<Layouts>(DEFAULT_LAYOUTS)
   const [isLive, setIsLive] = useState(true)
+  const [aiSettings, setAiSettings] = useState<AiSettings>({ model: localStorage.getItem('inst-ai-model') || '' })
 
   // Listen for RMG auth messages
   useEffect(() => {
@@ -79,7 +82,7 @@ export default function App() {
         setAuthToken(event.data.authToken)
       }
       if (event.data?.type === 'RMG_TOGGLE_SETTINGS') {
-        // TODO: open settings panel
+        // Settings panel listens for this message directly
       }
     }
     window.addEventListener('message', handleMessage)
@@ -156,7 +159,7 @@ export default function App() {
           </div>
           <div key="ai-briefing">
             <WidgetPanel title="AI Briefing" icon="brain" live>
-              <AiBriefing />
+              <AiBriefing selectedModel={aiSettings.model} />
             </WidgetPanel>
           </div>
           <div key="news">
@@ -181,6 +184,9 @@ export default function App() {
           </div>
         </ResponsiveGridLayout>
       </main>
+
+      {/* Settings Panel (toggled via RMG footer button) */}
+      <SettingsPanel onSettingsChange={setAiSettings} />
     </div>
   )
 }

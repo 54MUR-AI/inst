@@ -10,7 +10,11 @@ interface BriefingItem {
   timestamp: string
 }
 
-export default function AiBriefing() {
+interface AiBriefingProps {
+  selectedModel?: string
+}
+
+export default function AiBriefing({ selectedModel }: AiBriefingProps) {
   const [items, setItems] = useState<BriefingItem[]>([])
   const [loading, setLoading] = useState(true)
   const [ollamaAvailable, setOllamaAvailable] = useState(ollamaProxy.isAvailable)
@@ -113,7 +117,7 @@ export default function AiBriefing() {
 
     // Build context from current local briefing items
     const context = items.map(i => `[${i.type.toUpperCase()}] ${i.title}: ${i.body}`).join('\n')
-    const model = ollamaProxy.availableModels[0] || 'llama3:latest'
+    const model = selectedModel || ollamaProxy.availableModels[0] || 'llama3:latest'
 
     try {
       const result = await ollamaProxy.chat(model, [
@@ -183,7 +187,9 @@ export default function AiBriefing() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <span className="text-[9px] text-samurai-steel font-mono">
-            {ollamaAvailable ? 'OLLAMA CONNECTED' : 'LOCAL ANALYSIS'}
+            {ollamaAvailable
+              ? `OLLAMA · ${selectedModel || ollamaProxy.availableModels[0] || 'no model'}`
+              : 'LOCAL ANALYSIS'}
           </span>
         </div>
         <div className="flex items-center gap-1">
