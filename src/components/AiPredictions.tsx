@@ -47,9 +47,10 @@ export default function AiPredictions({ selectedModel }: AiPredictionsProps) {
         { role: 'user', content: `Analyze and generate predictions:\n\n${context}` },
       ])
       const response = (result as any)?.message?.content || ''
+      console.log('[AI Predictions] Raw response:', response.slice(0, 500))
       if (!response) throw new Error('Empty response from Ollama')
       const parsed = parsePredictions(response)
-      if (!parsed) throw new Error('Could not parse predictions. Try again.')
+      if (!parsed) throw new Error('Could not parse predictions. Try a larger model (7B+) for better structured output.')
       setPredictions(parsed)
     } catch (err) { setError(err instanceof Error ? err.message : 'Failed') }
     setLoading(false)

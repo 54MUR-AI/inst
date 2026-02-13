@@ -149,17 +149,87 @@ Rules: Real prices from data. Realistic targets. Tight stops. Diverse markets. A
 
 export function parsePredictions(raw: string): PredictionSet | null {
   try {
-    const bM = raw.match(/===MARKET_BIAS===\s*\n(.*?)(?=\n===|$)/s)
-    const buM = raw.match(/===BEST_BUYS===\s*\n(.*?)(?=\n===|$)/s)
-    const cM = raw.match(/===BEST_CONTRACTS===\s*\n(.*?)(?=\n===|$)/s)
+    const ts = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })
+
+    // Flexible line parser — accepts 5+ pipe fields, fills missing with defaults
     const pL = (l: string): Prediction | null => {
-      const p = l.split('|').map(s => s.trim()); if (p.length < 9) return null
-      const d = p[0].toUpperCase(); if (!['BUY','LONG','SHORT'].includes(d)) return null
-      return { asset: p[1], market: p[2], direction: d === 'SHORT' ? 'SHORT' : 'LONG', entry: p[3], exitTarget: p[4], stopLoss: p[5], confidence: Math.min(100, Math.max(0, parseInt(p[6]) || 0)), timeframe: p[7], rationale: p[8] }
+      const p = l.split('|').map(s => s.trim())
+      if (p.length < 3) return null
+      const d = p[0].toUpperCase().replace(/[^A-Z]/g, '')
+      if (!['BUY','LONG','SHORT'].includes(d)) return null
+      return {
+        asset: p[1] || 'Unknown',
+        market: p[2] || 'Mixed',
+        direction: d === 'SHORT' ? 'SHORT' : 'LONG',
+        entry: p[3] || 'Market',
+        exitTarget: p[4] || 'TBD',
+        stopLoss: p[5] || 'TBD',
+        confidence: Math.min(100, Math.max(0, parseInt(p[6]) || 65)),
+        timeframe: p[7] || '1-4 weeks',
+        rationale: p[8] || p.slice(3).join(' ') || 'Based on current market conditions',
+      }
     }
-    const pS = (t?: string) => t ? t.split('\n').filter(l => l.includes('|')).map(pL).filter(Boolean) as Prediction[] : []
-    const bb = pS(buM?.[1]).slice(0, 3), bc = pS(cM?.[1]).slice(0, 3)
-    if (!bb.length && !bc.length) return null
-    return { bestBuys: bb, bestContracts: bc, marketBias: bM?.[1]?.trim() || 'Unable to determine.', generatedAt: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }) }
+    const parseLines = (t?: string) => t ? t.split('\n').filter(l => l.includes('|')).map(pL).filter(Boolean) as Prediction[] : []
+
+    // Try structured format first (flexible header matching)
+    const bM = raw.match(/={2,}\s*MARKET.?BIAS\s*={0,}\s*\n(.*?)(?=\n={2,}|$)/si)
+    const buM = raw.match(/={2,}\s*BEST.?BUY\S*\s*={0,}\s*\n(.*?)(?=\n={2,}|$)/si)
+    const cM = raw.match(/={2,}\s*BEST.?CONTRACT\S*\s*={0,}\s*\n(.*?)(?=\n={2,}|$)/si)
+
+    const bb = parseLines(buM?.[1]).slice(0, 3)
+    const bc = parseLines(cM?.[1]).slice(0, 3)
+
+    if (bb.length || bc.length) {
+      return { bestBuys: bb, bestContracts: bc, marketBias: bM?.[1]?.trim() || extractBias(raw), generatedAt: ts }
+    }
+
+    // Fallback: extract ANY pipe-delimited lines from the entire response
+    const allPipes = raw.split('\n').filter(l => l.includes('|'))
+    const allParsed = allPipes.map(pL).filter(Boolean) as Prediction[]
+    if (allParsed.length > 0) {
+      const buys = allParsed.filter(p => p.direction === 'LONG').slice(0, 3)
+      const shorts = allParsed.filter(p => p.direction === 'SHORT').slice(0, 3)
+      // If all are LONG, split them between buys and contracts
+      if (shorts.length === 0 && buys.length > 3) {
+        return { bestBuys: buys.slice(0, 3), bestContracts: buys.slice(3, 6), marketBias: extractBias(raw), generatedAt: ts }
+      }
+      return { bestBuys: buys.length ? buys : allParsed.slice(0, 3), bestContracts: shorts.length ? shorts : allParsed.slice(3, 6), marketBias: extractBias(raw), generatedAt: ts }
+    }
+
+    // Last resort: try to build predictions from raw text mentioning BUY/SELL/LONG/SHORT
+    const lastResort = extractFromFreeText(raw)
+    if (lastResort.length > 0) {
+      return { bestBuys: lastResort.slice(0, 3), bestContracts: lastResort.slice(3, 6), marketBias: extractBias(raw), generatedAt: ts }
+    }
+
+    return null
   } catch { return null }
+}
+
+function extractBias(raw: string): string {
+  // Try to find a sentence about market direction
+  const lines = raw.split('\n').filter(l => l.trim().length > 20 && !l.includes('|'))
+  const biasLine = lines.find(l => /bull|bear|neutral|risk|cautious|optimis|pessimis|market/i.test(l))
+  return biasLine?.trim().slice(0, 200) || 'Mixed signals across markets.'
+}
+
+function extractFromFreeText(raw: string): Prediction[] {
+  const results: Prediction[] = []
+  const lines = raw.split('\n')
+  for (const line of lines) {
+    const buyMatch = line.match(/\b(BUY|LONG|SHORT|SELL)\b[:\s]+([A-Z]{2,10}|\w[\w\s]{1,20})/i)
+    if (buyMatch) {
+      const dir = buyMatch[1].toUpperCase()
+      const asset = buyMatch[2].trim()
+      const priceMatch = line.match(/\$[\d,.]+/)
+      results.push({
+        asset, market: 'Mixed', direction: (dir === 'SELL' || dir === 'SHORT') ? 'SHORT' : 'LONG',
+        entry: priceMatch?.[0] || 'Market', exitTarget: 'TBD', stopLoss: 'TBD',
+        confidence: 55, timeframe: '1-4 weeks',
+        rationale: line.trim().slice(0, 150),
+      })
+    }
+    if (results.length >= 6) break
+  }
+  return results
 }
