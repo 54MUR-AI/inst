@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Brain, RefreshCw, AlertTriangle } from 'lucide-react'
+import { Brain, RefreshCw, AlertTriangle, Sparkles } from 'lucide-react'
 import { API, fetchCoinGecko } from '../lib/api'
+import ollamaProxy from '../lib/ollamaProxy'
 
 interface BriefingItem {
   type: 'trend' | 'alert' | 'insight'
@@ -12,38 +13,22 @@ interface BriefingItem {
 export default function AiBriefing() {
   const [items, setItems] = useState<BriefingItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [ollamaAvailable, setOllamaAvailable] = useState(false)
+  const [ollamaAvailable, setOllamaAvailable] = useState(ollamaProxy.isAvailable)
+  const [deepLoading, setDeepLoading] = useState(false)
 
   useEffect(() => {
-    // Check if Ollama is available via RMG bridge
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'OLLAMA_AVAILABLE') {
-        setOllamaAvailable(true)
-      }
-      if (event.data?.type === 'OLLAMA_BRIEFING_RESPONSE') {
-        try {
-          const parsed = JSON.parse(event.data.content)
-          if (Array.isArray(parsed)) {
-            setItems(parsed)
-          }
-        } catch {
-          // If not JSON, treat as single insight
-          setItems([{
-            type: 'insight',
-            title: 'AI Analysis',
-            body: event.data.content,
-            timestamp: new Date().toLocaleTimeString(),
-          }])
-        }
-        setLoading(false)
-      }
-    }
-    window.addEventListener('message', handleMessage)
+    // Listen for bridge status changes
+    const unsub = ollamaProxy.onStatusChange(() => {
+      setOllamaAvailable(ollamaProxy.isAvailable)
+    })
 
-    // Generate placeholder briefing from market data
+    // Request models from bridge on mount
+    ollamaProxy.requestModels()
+
+    // Generate local briefing from market data
     generateLocalBriefing()
 
-    return () => window.removeEventListener('message', handleMessage)
+    return unsub
   }, [])
 
   const generateLocalBriefing = async () => {
@@ -105,16 +90,6 @@ export default function AiBriefing() {
         })
       }
 
-      // Add Ollama prompt hint
-      if (!ollamaAvailable) {
-        briefings.push({
-          type: 'insight',
-          title: 'AI Enhancement Available',
-          body: 'Connect Ollama via the RMG extension for deeper AI-powered analysis including trend detection, anomaly alerts, and cross-market synthesis.',
-          timestamp: now,
-        })
-      }
-
       setItems(briefings.length > 0 ? briefings : [{
         type: 'insight',
         title: 'Initializing...',
@@ -130,6 +105,60 @@ export default function AiBriefing() {
       }])
     }
     setLoading(false)
+  }
+
+  const generateDeepBriefing = async () => {
+    if (!ollamaProxy.isAvailable) return
+    setDeepLoading(true)
+
+    // Build context from current local briefing items
+    const context = items.map(i => `[${i.type.toUpperCase()}] ${i.title}: ${i.body}`).join('\n')
+    const model = ollamaProxy.availableModels[0] || 'llama3:latest'
+
+    try {
+      const result = await ollamaProxy.chat(model, [
+        {
+          role: 'system',
+          content: 'You are a concise financial analyst. Given market data, provide 2-3 short actionable insights. Each insight should be 1-2 sentences. Format as bullet points starting with a category tag like [TREND], [ALERT], or [INSIGHT]. Do not use markdown. Be direct and specific.',
+        },
+        {
+          role: 'user',
+          content: `Analyze this market data and provide deeper insights:\n\n${context}`,
+        },
+      ])
+
+      const response = (result as { message?: { content?: string } })?.message?.content || ''
+      if (!response) throw new Error('Empty response')
+
+      const now = new Date().toLocaleTimeString()
+      const aiItems: BriefingItem[] = response
+        .split('\n')
+        .filter((l: string) => l.trim().length > 10)
+        .slice(0, 4)
+        .map((line: string) => {
+          const type: BriefingItem['type'] = line.includes('[ALERT]') ? 'alert' : line.includes('[TREND]') ? 'trend' : 'insight'
+          const body = line.replace(/^\s*[-•*]\s*/, '').replace(/\[(TREND|ALERT|INSIGHT)\]\s*/i, '').trim()
+          return {
+            type,
+            title: type === 'alert' ? 'AI Alert' : type === 'trend' ? 'AI Trend' : 'AI Insight',
+            body,
+            timestamp: now,
+          }
+        })
+
+      if (aiItems.length > 0) {
+        setItems(prev => [...aiItems, ...prev])
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      setItems(prev => [{
+        type: 'alert',
+        title: 'Ollama Error',
+        body: `Deep analysis failed: ${msg}. Check that Ollama is running locally.`,
+        timestamp: new Date().toLocaleTimeString(),
+      }, ...prev])
+    }
+    setDeepLoading(false)
   }
 
   const getTypeIcon = (type: string) => {
@@ -157,14 +186,26 @@ export default function AiBriefing() {
             {ollamaAvailable ? 'OLLAMA CONNECTED' : 'LOCAL ANALYSIS'}
           </span>
         </div>
-        <button
-          onClick={generateLocalBriefing}
-          disabled={loading}
-          className="p-1 rounded hover:bg-samurai-grey-dark transition-colors"
-          title="Refresh briefing"
-        >
-          <RefreshCw className={`w-3 h-3 text-samurai-steel ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex items-center gap-1">
+          {ollamaAvailable && (
+            <button
+              onClick={generateDeepBriefing}
+              disabled={deepLoading || loading}
+              className="p-1 rounded hover:bg-samurai-grey-dark transition-colors"
+              title="Deep AI analysis via Ollama"
+            >
+              <Sparkles className={`w-3 h-3 text-samurai-red ${deepLoading ? 'animate-pulse' : ''}`} />
+            </button>
+          )}
+          <button
+            onClick={generateLocalBriefing}
+            disabled={loading}
+            className="p-1 rounded hover:bg-samurai-grey-dark transition-colors"
+            title="Refresh briefing"
+          >
+            <RefreshCw className={`w-3 h-3 text-samurai-steel ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* Briefing items */}
