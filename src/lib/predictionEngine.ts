@@ -1,4 +1,4 @@
-import { API, fetchCoinGecko } from './api'
+import { API, fetchCoinGecko, getSharedMarkets } from './api'
 import { fetchQuotes, INDICES, METALS, ENERGY, FOREX, BONDS, POPULAR_STOCKS, calcGSR } from './yahooFinance'
 import type { YahooQuote } from './yahooFinance'
 import { buildFredContext } from './fred'
@@ -42,7 +42,7 @@ export async function gatherPredictionData(): Promise<PredictionSnapshot> {
   const allSyms = [...INDICES, ...METALS, ...ENERGY, ...FOREX, ...BONDS, ...POPULAR_STOCKS].map(x => x.symbol)
   const [qR, fR, gR, cR, nR] = await Promise.allSettled([
     fetchQuotes(allSyms), fetch(API.fng('/fng/?limit=1')), fetchCoinGecko('/api/v3/global'),
-    fetchCoinGecko('/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=20&sparkline=false&price_change_percentage=7d%2C30d'),
+    getSharedMarkets(),
     fetchPredHeadlines(),
   ])
   const q = qR.status === 'fulfilled' ? qR.value : new Map<string, YahooQuote>()
@@ -52,8 +52,9 @@ export async function gatherPredictionData(): Promise<PredictionSnapshot> {
   let crypto: PredictionSnapshot['crypto'] = null
   if (gR.status === 'fulfilled' && gR.value.ok) try { const d = (await gR.value.json()).data; crypto = { mcapChange: d.market_cap_change_percentage_24h_usd, btcDom: d.market_cap_percentage.btc, totalVolume: d.total_volume.usd } } catch {}
   let topCoins: CoinDetail[] = []
-  if (cR.status === 'fulfilled' && cR.value.ok) try {
-    topCoins = (await cR.value.json()).slice(0, 20).map((c: any) => ({
+  if (cR.status === 'fulfilled') try {
+    const coins = cR.value as any[]
+    topCoins = coins.slice(0, 20).map((c: any) => ({
       symbol: c.symbol.toUpperCase(), name: c.name, price: c.current_price,
       change24h: c.price_change_percentage_24h || 0,
       change7d: c.price_change_percentage_7d_in_currency || 0,

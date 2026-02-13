@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { fetchCoinGecko } from '../lib/api'
+import { getSharedMarkets } from '../lib/api'
 
 interface CoinData {
   id: string
@@ -17,12 +17,11 @@ export default function CryptoHeatmap() {
   useEffect(() => {
     const fetchCoins = async () => {
       try {
-        const res = await fetchCoinGecko(
-          '/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&sparkline=false&price_change_percentage=24h'
-        )
-        if (!res.ok) throw new Error('CoinGecko API error')
-        const data: CoinData[] = (await res.json()).map((c: CoinData) => ({
-          ...c,
+        const raw = await getSharedMarkets()
+        if (!raw.length) throw new Error('No data')
+        const data: CoinData[] = raw.map((c: any) => ({
+          id: c.id, symbol: c.symbol, name: c.name,
+          market_cap: c.market_cap, current_price: c.current_price,
           price_change_percentage_24h: c.price_change_percentage_24h ?? 0,
         }))
         setCoins(data)

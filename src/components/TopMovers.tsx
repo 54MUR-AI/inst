@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, BarChart3 } from 'lucide-react'
 import { fetchQuotes, fetchSparklines, POPULAR_STOCKS } from '../lib/yahooFinance'
-import { fetchCoinGecko } from '../lib/api'
+import { getSharedMarkets } from '../lib/api'
 import Sparkline from './Sparkline'
 
 interface Mover {
@@ -24,9 +24,9 @@ export default function TopMovers() {
 
   useEffect(() => {
     const load = async () => {
-      const [stockQuotes, cryptoRes] = await Promise.allSettled([
+      const [stockQuotes, cryptoData] = await Promise.allSettled([
         fetchQuotes(POPULAR_STOCKS.map(s => s.symbol)),
-        fetchCoinGecko('/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=25&sparkline=false'),
+        getSharedMarkets(),
       ])
 
       const all: Mover[] = []
@@ -48,19 +48,16 @@ export default function TopMovers() {
       }
 
       // Crypto
-      if (cryptoRes.status === 'fulfilled' && cryptoRes.value.ok) {
-        try {
-          const coins = await cryptoRes.value.json()
-          coins.slice(0, 25).forEach((c: any) => {
-            const vol = c.total_volume || 0
-            all.push({
-              symbol: c.symbol.toUpperCase(), name: c.name, price: c.current_price,
-              changePct: c.price_change_percentage_24h || 0,
-              volume: vol > 1e9 ? `$${(vol / 1e9).toFixed(1)}B` : vol > 1e6 ? `$${(vol / 1e6).toFixed(0)}M` : `$${(vol / 1e3).toFixed(0)}K`,
-              market: 'Crypto',
-            })
+      if (cryptoData.status === 'fulfilled' && cryptoData.value.length) {
+        cryptoData.value.slice(0, 25).forEach((c: any) => {
+          const vol = c.total_volume || 0
+          all.push({
+            symbol: c.symbol.toUpperCase(), name: c.name, price: c.current_price,
+            changePct: c.price_change_percentage_24h || 0,
+            volume: vol > 1e9 ? `$${(vol / 1e9).toFixed(1)}B` : vol > 1e6 ? `$${(vol / 1e6).toFixed(0)}M` : `$${(vol / 1e3).toFixed(0)}K`,
+            market: 'Crypto',
           })
-        } catch {}
+        })
       }
 
       setMovers(all)

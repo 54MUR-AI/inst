@@ -16,7 +16,7 @@ const RSS_FEEDS = [
   { url: 'https://feeds.marketwatch.com/marketwatch/topstories/', source: 'MarketWatch', category: 'markets' as const },
   { url: 'https://feeds.bbci.co.uk/news/business/rss.xml', source: 'BBC Business', category: 'macro' as const },
   { url: 'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml', source: 'NYT Business', category: 'macro' as const },
-  { url: 'https://feeds.reuters.com/reuters/businessNews', source: 'Reuters', category: 'markets' as const },
+  { url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114', source: 'CNBC', category: 'markets' as const },
 ]
 
 function timeAgo(dateStr: string): string {

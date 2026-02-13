@@ -93,7 +93,7 @@ async function fetchNewsHeadlines(): Promise<{ title: string; link: string; sour
     { url: 'https://www.coindesk.com/arc/outboundfeeds/rss/', source: 'CoinDesk' },
     { url: 'https://feeds.marketwatch.com/marketwatch/topstories/', source: 'MarketWatch' },
     { url: 'https://feeds.bbci.co.uk/news/business/rss.xml', source: 'BBC' },
-    { url: 'https://feeds.reuters.com/reuters/businessNews', source: 'Reuters' },
+    { url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114', source: 'CNBC' },
   ]
   const results = await Promise.allSettled(
     feeds.map(async (f) => {
