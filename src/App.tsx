@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Responsive, WidthProvider } from 'react-grid-layout'
 import type { Layouts, Layout } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
@@ -24,6 +24,7 @@ import SettingsPanel from './components/SettingsPanel'
 import type { AiSettings } from './components/SettingsPanel'
 import { ScanEye, Zap } from 'lucide-react'
 import { setAuthToken } from './lib/ldgrBridge'
+import { loadSavedLayouts, saveLayouts, loadVisibility, saveVisibility } from './lib/widgetRegistry'
 
 const ResponsiveGridLayout = WidthProvider(Responsive)
 
@@ -79,8 +80,12 @@ const DEFAULT_LAYOUTS = {
 }
 
 export default function App() {
-  const [layouts, setLayouts] = useState<Layouts>(DEFAULT_LAYOUTS)
+  const [layouts, setLayouts] = useState<Layouts>(() => {
+    const saved = loadSavedLayouts()
+    return (saved as Layouts) || DEFAULT_LAYOUTS
+  })
   const [isLive, setIsLive] = useState(true)
+  const [visibility, setVisibility] = useState<Record<string, boolean>>(loadVisibility)
   const [aiSettings, setAiSettings] = useState<AiSettings>({
     provider: localStorage.getItem('nsit-ai-provider') || 'ollama',
     model: localStorage.getItem('nsit-ai-model') || '',
@@ -112,8 +117,24 @@ export default function App() {
 
   const handleLayoutChange = useCallback((_layout: Layout[], allLayouts: Layouts) => {
     setLayouts(allLayouts)
-    // TODO: persist to Supabase
+    saveLayouts(allLayouts as Record<string, any[]>)
   }, [])
+
+  const handleVisibilityChange = useCallback((vis: Record<string, boolean>) => {
+    setVisibility(vis)
+    saveVisibility(vis)
+  }, [])
+
+  // Filter layouts to only include visible widgets
+  const filteredLayouts = useMemo(() => {
+    const result: Record<string, Layout[]> = {}
+    for (const [bp, items] of Object.entries(layouts)) {
+      result[bp] = (items as Layout[]).filter(item => visibility[item.i] !== false)
+    }
+    return result as Layouts
+  }, [layouts, visibility])
+
+  const isVisible = (id: string) => visibility[id] !== false
 
   return (
     <div className="h-screen flex flex-col bg-samurai-black overflow-hidden">
@@ -144,7 +165,7 @@ export default function App() {
       <main className="flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4">
         <ResponsiveGridLayout
           className="layout"
-          layouts={layouts}
+          layouts={filteredLayouts}
           breakpoints={{ lg: 1200, md: 900, sm: 0 }}
           cols={{ lg: 12, md: 8, sm: 6 }}
           rowHeight={60}
@@ -153,81 +174,85 @@ export default function App() {
           compactType="vertical"
           margin={[8, 8]}
         >
-          <div key="global-equities">
+          {isVisible('global-equities') && <div key="global-equities">
             <WidgetPanel title="Global Indices" icon="trending-up" live>
               <GlobalEquities />
             </WidgetPanel>
-          </div>
-          <div key="commodities">
+          </div>}
+          {isVisible('commodities') && <div key="commodities">
             <WidgetPanel title="Commodities & Metals" icon="gem" live>
               <CommoditiesMetals />
             </WidgetPanel>
-          </div>
-          <div key="forex-bonds">
+          </div>}
+          {isVisible('forex-bonds') && <div key="forex-bonds">
             <WidgetPanel title="Forex & Bonds" icon="dollar" live>
               <ForexBonds />
             </WidgetPanel>
-          </div>
-          <div key="market-overview">
+          </div>}
+          {isVisible('market-overview') && <div key="market-overview">
             <WidgetPanel title="Crypto Overview" icon="trending-up">
               <MarketOverview />
             </WidgetPanel>
-          </div>
-          <div key="fear-greed">
+          </div>}
+          {isVisible('fear-greed') && <div key="fear-greed">
             <WidgetPanel title="Fear & Greed" icon="gauge">
               <FearGreedGauge />
             </WidgetPanel>
-          </div>
-          <div key="ai-briefing">
+          </div>}
+          {isVisible('ai-briefing') && <div key="ai-briefing">
             <WidgetPanel title="AI Briefing" icon="brain" live>
               <AiBriefing selectedModel={aiSettings.model} />
             </WidgetPanel>
-          </div>
-          <div key="news">
+          </div>}
+          {isVisible('news') && <div key="news">
             <WidgetPanel title="Breaking News" icon="newspaper" live>
               <NewsFeed />
             </WidgetPanel>
-          </div>
-          <div key="polymarket">
+          </div>}
+          {isVisible('polymarket') && <div key="polymarket">
             <WidgetPanel title="Prediction Markets" icon="target" live>
               <PolymarketFeed />
             </WidgetPanel>
-          </div>
-          <div key="macro">
+          </div>}
+          {isVisible('macro') && <div key="macro">
             <WidgetPanel title="Macro Dashboard" icon="chart">
               <MacroDashboard />
             </WidgetPanel>
-          </div>
-          <div key="econ-calendar">
+          </div>}
+          {isVisible('econ-calendar') && <div key="econ-calendar">
             <WidgetPanel title="Economic Calendar" icon="calendar">
               <EconomicCalendar />
             </WidgetPanel>
-          </div>
-          <div key="top-movers">
+          </div>}
+          {isVisible('top-movers') && <div key="top-movers">
             <WidgetPanel title="Top Movers" icon="flame" live>
               <TopMovers />
             </WidgetPanel>
-          </div>
-          <div key="ai-predictions">
+          </div>}
+          {isVisible('ai-predictions') && <div key="ai-predictions">
             <WidgetPanel title="AI Predictions" icon="crosshair">
               <AiPredictions selectedModel={aiSettings.model} />
             </WidgetPanel>
-          </div>
-          <div key="candlestick">
+          </div>}
+          {isVisible('candlestick') && <div key="candlestick">
             <WidgetPanel title="Charts" icon="candlestick" live>
               <CandlestickChart />
             </WidgetPanel>
-          </div>
-          <div key="crypto-heatmap">
+          </div>}
+          {isVisible('crypto-heatmap') && <div key="crypto-heatmap">
             <WidgetPanel title="Crypto Heatmap" icon="grid">
               <CryptoHeatmap />
             </WidgetPanel>
-          </div>
+          </div>}
         </ResponsiveGridLayout>
       </main>
 
       {/* Settings Panel (toggled via RMG footer button) */}
-      <SettingsPanel onSettingsChange={setAiSettings} />
+      <SettingsPanel
+        onSettingsChange={setAiSettings}
+        widgetVisibility={visibility}
+        onVisibilityChange={handleVisibilityChange}
+      />
     </div>
   )
 }

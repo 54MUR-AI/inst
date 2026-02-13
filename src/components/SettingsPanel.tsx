@@ -1,12 +1,18 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Settings, X, Key, RefreshCw, ExternalLink } from 'lucide-react'
+import { Settings, X, Key, RefreshCw, ExternalLink, LayoutGrid, RotateCcw, Eye, EyeOff } from 'lucide-react'
 import ollamaProxy from '../lib/ollamaProxy'
 import OllamaSetupWizard from './OllamaSetupWizard'
 import { getSupabase } from '../lib/supabase'
 import { decryptApiKey } from '../lib/ldgrBridge'
 
+import { WIDGETS, clearSavedLayouts } from '../lib/widgetRegistry'
+
 export interface AiSettings { provider: string; model: string; apiKey: string }
-interface SettingsPanelProps { onSettingsChange: (s: AiSettings) => void }
+interface SettingsPanelProps {
+  onSettingsChange: (s: AiSettings) => void
+  widgetVisibility: Record<string, boolean>
+  onVisibilityChange: (vis: Record<string, boolean>) => void
+}
 
 const AI_PROVIDERS: Record<string, { name: string; models: string[]; requiresKey: boolean }> = {
   ollama:      { name: 'Ollama (Local)',  models: ['llama3:latest','mistral:latest','llama2:latest'], requiresKey: false },
@@ -36,7 +42,7 @@ function getUserEmail(): string | null {
   return null
 }
 
-export default function SettingsPanel({ onSettingsChange }: SettingsPanelProps) {
+export default function SettingsPanel({ onSettingsChange, widgetVisibility, onVisibilityChange }: SettingsPanelProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [provider, setProvider] = useState(() => localStorage.getItem(STORAGE_PROVIDER) || 'ollama')
   const [availableProviders, setAvailableProviders] = useState<string[]>(['ollama'])
@@ -245,6 +251,55 @@ export default function SettingsPanel({ onSettingsChange }: SettingsPanelProps) 
             </select>
           </div>
         )}
+
+        {/* ── Dashboard Widgets ── */}
+        <div className="mb-6 border-t border-samurai-grey-dark pt-6">
+          <div className="flex items-center justify-between mb-4">
+            <label className="text-white font-bold uppercase text-sm flex items-center gap-2">
+              <LayoutGrid className="w-4 h-4 text-samurai-red" />Dashboard Widgets
+            </label>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const all: Record<string, boolean> = {}
+                  WIDGETS.forEach(w => { all[w.id] = true })
+                  onVisibilityChange(all)
+                }}
+                className="text-[9px] font-bold px-2 py-1 rounded bg-samurai-grey-dark/50 text-samurai-steel hover:text-white transition-colors"
+              >Show All</button>
+              <button
+                onClick={() => {
+                  clearSavedLayouts()
+                  window.location.reload()
+                }}
+                className="flex items-center gap-1 text-[9px] font-bold px-2 py-1 rounded bg-samurai-grey-dark/50 text-samurai-steel hover:text-white transition-colors"
+                title="Reset widget positions to default"
+              ><RotateCcw className="w-3 h-3" />Reset Layout</button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {WIDGETS.map(w => {
+              const visible = widgetVisibility[w.id] !== false
+              return (
+                <button
+                  key={w.id}
+                  onClick={() => onVisibilityChange({ ...widgetVisibility, [w.id]: !visible })}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all text-left ${
+                    visible
+                      ? 'border-samurai-red/30 bg-samurai-red/10 text-white'
+                      : 'border-samurai-grey-dark bg-samurai-grey-dark/20 text-samurai-steel'
+                  }`}
+                >
+                  {visible
+                    ? <Eye className="w-3.5 h-3.5 text-samurai-red flex-shrink-0" />
+                    : <EyeOff className="w-3.5 h-3.5 text-samurai-steel/50 flex-shrink-0" />
+                  }
+                  <span className="text-xs font-medium truncate">{w.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
 
         {/* Apply Button */}
         <button onClick={handleApply}
