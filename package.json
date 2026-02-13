@@ -1,8 +1,8 @@
 {
-  "name": "inst",
+  "name": "nsit",
   "private": true,
   "version": "0.1.0",
-  "description": "INST - Intelligent Navigation & Strategic Telemetry",
+  "description": "NSIT - Networked Speculation Intelligence Tool",
   "type": "module",
   "scripts": {
     "dev": "vite",

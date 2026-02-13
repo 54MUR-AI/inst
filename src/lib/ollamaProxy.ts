@@ -1,5 +1,5 @@
 /**
- * Ollama Proxy Service for INST
+ * Ollama Proxy Service for NSIT
  * Communicates with local Ollama through the RMG Bridge Extension.
  * Same protocol as SCRP's ollamaProxy.js.
  */
@@ -60,7 +60,7 @@ class OllamaProxyService {
   /** Send a request to Ollama through the extension */
   async request(endpoint: string, body: unknown, method = 'POST'): Promise<unknown> {
     return new Promise((resolve, reject) => {
-      const requestId = `inst_ollama_${++this.requestId}_${Date.now()}`
+      const requestId = `nsit_ollama_${++this.requestId}_${Date.now()}`
 
       const responseHandler = (event: MessageEvent) => {
         if (event.data?.type === 'RMG_OLLAMA_API_RESPONSE' &&

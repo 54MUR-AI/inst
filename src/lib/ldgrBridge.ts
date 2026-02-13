@@ -1,5 +1,5 @@
 /**
- * LDGR Bridge for INST
+ * LDGR Bridge for NSIT
  * Fetches encrypted API keys from Supabase and decrypts them client-side
  * using the same AES-256-GCM + PBKDF2 scheme as RMG/LDGR.
  */

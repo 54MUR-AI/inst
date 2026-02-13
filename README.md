@@ -1,13 +1,16 @@
-# INST - Intelligent Navigation & Strategic Telemetry
+# NSIT - Networked Speculation Intelligence Tool
 
-A real-time financial command center built with React, featuring interactive widgets for crypto markets, prediction markets, macroeconomic data, AI-powered analysis, and breaking news.
+A real-time financial command center built with React, featuring interactive widgets for global equities, commodities, forex, crypto markets, prediction markets, macroeconomic data, AI-powered analysis, and breaking news.
 
 ## Widgets
 
 | Widget | Source | Description |
 |--------|--------|-------------|
+| **Global Indices** | Yahoo Finance v8 | S&P 500, Dow, NASDAQ, Russell 2000, FTSE, DAX, CAC 40, Nikkei, Shanghai, Hang Seng, Sensex |
+| **Commodities & Metals** | Yahoo Finance v8 | Gold, Silver, Platinum, Palladium, Copper (COMEX), WTI/Brent Crude, Natural Gas, GSR |
+| **Forex & Bonds** | Yahoo Finance v8 | DXY, EUR/USD, GBP/USD, USD/JPY, USD/CNY + US Treasury yield curve (3M, 5Y, 10Y, 30Y) |
 | **Ticker Tape** | CoinGecko | Scrolling top-20 crypto prices with 24h change |
-| **Market Overview** | CoinGecko Global | Total market cap, volume, BTC/ETH dominance |
+| **Crypto Overview** | CoinGecko Global | Total market cap, volume, BTC/ETH dominance |
 | **Fear & Greed Gauge** | alternative.me | Animated SVG gauge with sentiment classification |
 | **Crypto Heatmap** | CoinGecko Markets | Treemap of top 50 coins by market cap & 24h change |
 | **Prediction Markets** | Polymarket Gamma API | Live prediction market events with odds visualization |
@@ -23,7 +26,7 @@ A real-time financial command center built with React, featuring interactive wid
 - **Layout:** react-grid-layout (drag/resize/save)
 - **Charts:** Recharts + D3
 - **Icons:** Lucide React
-- **Hosting:** Netlify
+- **Hosting:** Render (Static Site)
 
 ## Development
 
@@ -38,7 +41,7 @@ npm run build:quick # Vite build only (skip tsc)
 
 All external API calls route through `/api/*` proxy paths, handled by:
 - **Dev:** Vite server proxy (`vite.config.ts`)
-- **Prod:** Netlify `_redirects` rules
+- **Prod:** Render static site rewrite rules
 
 | Proxy Path | Target |
 |------------|--------|
@@ -46,28 +49,37 @@ All external API calls route through `/api/*` proxy paths, handled by:
 | `/api/polymarket/*` | `https://gamma-api.polymarket.com/*` |
 | `/api/fng/*` | `https://api.alternative.me/*` |
 | `/api/rss/*` | `https://api.rss2json.com/*` |
+| `/api/yahoo/*` | `https://query2.finance.yahoo.com/*` |
 
 CoinGecko calls are rate-limited via a staggered fetch queue (2s gap) in `src/lib/api.ts`.
 
 ## RMG Integration
 
-INST is embedded in the [RMG](https://roninmedia.studio) platform via iframe at the `/inst` route. It receives auth tokens via `postMessage` from the parent frame.
+NSIT is embedded in the [RMG](https://roninmedia.studio) platform via iframe at the `/nsit` route. It receives auth tokens via `postMessage` from the parent frame.
 
 ## Project Structure
 
 ```
 src/
 ├── lib/
-│   └── api.ts              # Proxy URL helpers + CoinGecko rate limiter
+│   ├── api.ts              # Proxy URL helpers + CoinGecko rate limiter
+│   ├── yahooFinance.ts     # Yahoo Finance v8 chart fetcher + cache
+│   ├── ollamaProxy.ts      # Ollama bridge via RMG extension
+│   ├── ldgrBridge.ts       # LDGR API key decryption
+│   └── supabase.ts         # Supabase client
 ├── components/
+│   ├── GlobalEquities.tsx   # Global stock indices
+│   ├── CommoditiesMetals.tsx # Metals, energy, GSR
+│   ├── ForexBonds.tsx       # Forex pairs + yield curve
 │   ├── TickerTape.tsx       # Scrolling crypto ticker
-│   ├── MarketOverview.tsx   # Global market stats
+│   ├── MarketOverview.tsx   # Global crypto stats
 │   ├── FearGreedGauge.tsx   # SVG sentiment gauge
 │   ├── CryptoHeatmap.tsx    # Market cap treemap
 │   ├── PolymarketFeed.tsx   # Prediction markets
 │   ├── MacroDashboard.tsx   # FRED macro indicators
 │   ├── AiBriefing.tsx       # AI market analysis
 │   ├── NewsFeed.tsx         # RSS news aggregator
+│   ├── SettingsPanel.tsx    # Ollama model selector
 │   └── WidgetPanel.tsx      # Reusable widget container
 ├── App.tsx                  # Main layout + grid
 ├── main.tsx                 # Entry point
@@ -76,10 +88,7 @@ src/
 
 ## Deployment
 
-```bash
-npm run build
-npx netlify-cli deploy --prod --dir=dist --no-build
-```
+Auto-deploys from `master` branch via Render.
 
 ## License
 

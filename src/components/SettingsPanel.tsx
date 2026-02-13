@@ -10,7 +10,7 @@ interface SettingsPanelProps {
   onSettingsChange: (settings: AiSettings) => void
 }
 
-const STORAGE_KEY = 'inst-ai-model'
+const STORAGE_KEY = 'nsit-ai-model'
 
 export default function SettingsPanel({ onSettingsChange }: SettingsPanelProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -60,7 +60,7 @@ export default function SettingsPanel({ onSettingsChange }: SettingsPanelProps) 
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-black text-white flex items-center gap-2">
             <Settings className="w-5 h-5 text-samurai-red" />
-            INST Settings
+            NSIT Settings
           </h2>
           <button
             onClick={() => setIsOpen(false)}

@@ -17,7 +17,7 @@ import CommoditiesMetals from './components/CommoditiesMetals'
 import ForexBonds from './components/ForexBonds'
 import SettingsPanel from './components/SettingsPanel'
 import type { AiSettings } from './components/SettingsPanel'
-import { Activity, Zap } from 'lucide-react'
+import { ScanEye, Zap } from 'lucide-react'
 import { setAuthToken } from './lib/ldgrBridge'
 
 const ResponsiveGridLayout = WidthProvider(Responsive)
@@ -64,7 +64,7 @@ const DEFAULT_LAYOUTS = {
 export default function App() {
   const [layouts, setLayouts] = useState<Layouts>(DEFAULT_LAYOUTS)
   const [isLive, setIsLive] = useState(true)
-  const [aiSettings, setAiSettings] = useState<AiSettings>({ model: localStorage.getItem('inst-ai-model') || '' })
+  const [aiSettings, setAiSettings] = useState<AiSettings>({ model: localStorage.getItem('nsit-ai-model') || '' })
 
   // Listen for RMG auth messages
   useEffect(() => {
@@ -74,7 +74,7 @@ export default function App() {
         try {
           const parsed = JSON.parse(event.data.authToken)
           if (parsed.access_token) {
-            sessionStorage.setItem('inst_auth_token', parsed.access_token)
+            sessionStorage.setItem('nsit_auth_token', parsed.access_token)
           }
         } catch {
           // ignore parse errors
@@ -99,9 +99,9 @@ export default function App() {
       {/* Header Bar */}
       <header className="flex-shrink-0 h-10 bg-samurai-black-lighter border-b border-samurai-grey-dark flex items-center px-4 gap-4">
         <div className="flex items-center gap-2">
-          <Activity className="w-4 h-4 text-samurai-red" />
-          <span className="text-sm font-bold text-white tracking-wider">INST</span>
-          <span className="text-[10px] text-samurai-steel font-mono hidden sm:inline">Intelligent Navigation & Strategic Telemetry</span>
+          <ScanEye className="w-4 h-4 text-samurai-red" />
+          <span className="text-sm font-bold text-white tracking-wider">NSIT</span>
+          <span className="text-[10px] text-samurai-steel font-mono hidden sm:inline">Networked Speculation Intelligence Tool</span>
         </div>
         <div className="flex-1" />
         <button
