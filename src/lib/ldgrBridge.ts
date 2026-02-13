@@ -151,3 +151,26 @@ export async function listAvailableServices(): Promise<string[]> {
 export function clearKeyCache() {
   keyCache.clear()
 }
+
+/**
+ * Decrypt an API key using user email (matches SCRP's ldgrDecryption.js).
+ * Used by SettingsPanel when decrypting keys fetched directly from Supabase.
+ */
+export async function decryptApiKey(encryptedBase64: string, userEmail: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', encoder.encode(userEmail), 'PBKDF2', false, ['deriveBits', 'deriveKey']
+  )
+  const key = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: encoder.encode(userEmail), iterations: 100000, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['decrypt']
+  )
+  const combined = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0))
+  const iv = combined.slice(0, 12)
+  const encrypted = combined.slice(12)
+  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, encrypted)
+  return new TextDecoder().decode(decrypted)
+}

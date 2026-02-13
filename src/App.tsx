@@ -64,7 +64,11 @@ const DEFAULT_LAYOUTS = {
 export default function App() {
   const [layouts, setLayouts] = useState<Layouts>(DEFAULT_LAYOUTS)
   const [isLive, setIsLive] = useState(true)
-  const [aiSettings, setAiSettings] = useState<AiSettings>({ model: localStorage.getItem('nsit-ai-model') || '' })
+  const [aiSettings, setAiSettings] = useState<AiSettings>({
+    provider: localStorage.getItem('nsit-ai-provider') || 'ollama',
+    model: localStorage.getItem('nsit-ai-model') || '',
+    apiKey: '',
+  })
 
   // Listen for RMG auth messages
   useEffect(() => {
