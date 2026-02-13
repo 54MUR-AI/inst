@@ -2,4 +2,5 @@
 /api/polymarket/*  https://gamma-api.polymarket.com/:splat  200
 /api/fng/*  https://api.alternative.me/:splat  200
 /api/rss/*  https://api.rss2json.com/:splat  200
+/api/yahoo/*  https://query1.finance.yahoo.com/:splat  200
 /*  /index.html  200

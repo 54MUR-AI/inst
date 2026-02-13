@@ -12,6 +12,9 @@ import AiBriefing from './components/AiBriefing'
 import PolymarketFeed from './components/PolymarketFeed'
 import MacroDashboard from './components/MacroDashboard'
 import NewsFeed from './components/NewsFeed'
+import GlobalEquities from './components/GlobalEquities'
+import CommoditiesMetals from './components/CommoditiesMetals'
+import ForexBonds from './components/ForexBonds'
 import { Activity, Zap } from 'lucide-react'
 import { setAuthToken } from './lib/ldgrBridge'
 
@@ -19,31 +22,40 @@ const ResponsiveGridLayout = WidthProvider(Responsive)
 
 const DEFAULT_LAYOUTS = {
   lg: [
-    { i: 'market-overview', x: 0, y: 0, w: 4, h: 4, minW: 3, minH: 3 },
-    { i: 'fear-greed', x: 4, y: 0, w: 2, h: 4, minW: 2, minH: 3 },
-    { i: 'ai-briefing', x: 6, y: 0, w: 6, h: 4, minW: 3, minH: 3 },
-    { i: 'news', x: 0, y: 4, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'polymarket', x: 4, y: 4, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'macro', x: 8, y: 4, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'crypto-heatmap', x: 0, y: 10, w: 12, h: 5, minW: 4, minH: 4 },
+    { i: 'global-equities', x: 0, y: 0, w: 4, h: 5, minW: 3, minH: 4 },
+    { i: 'commodities', x: 4, y: 0, w: 4, h: 5, minW: 3, minH: 4 },
+    { i: 'forex-bonds', x: 8, y: 0, w: 4, h: 5, minW: 3, minH: 4 },
+    { i: 'market-overview', x: 0, y: 5, w: 4, h: 4, minW: 3, minH: 3 },
+    { i: 'fear-greed', x: 4, y: 5, w: 2, h: 4, minW: 2, minH: 3 },
+    { i: 'ai-briefing', x: 6, y: 5, w: 6, h: 4, minW: 3, minH: 3 },
+    { i: 'news', x: 0, y: 9, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'polymarket', x: 4, y: 9, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'macro', x: 8, y: 9, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'crypto-heatmap', x: 0, y: 15, w: 12, h: 5, minW: 4, minH: 4 },
   ],
   md: [
-    { i: 'market-overview', x: 0, y: 0, w: 5, h: 4, minW: 3, minH: 3 },
-    { i: 'fear-greed', x: 5, y: 0, w: 3, h: 4, minW: 2, minH: 3 },
-    { i: 'ai-briefing', x: 0, y: 4, w: 8, h: 4, minW: 3, minH: 3 },
-    { i: 'news', x: 0, y: 8, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'polymarket', x: 4, y: 8, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'macro', x: 0, y: 14, w: 8, h: 6, minW: 3, minH: 4 },
-    { i: 'crypto-heatmap', x: 0, y: 20, w: 8, h: 5, minW: 4, minH: 4 },
+    { i: 'global-equities', x: 0, y: 0, w: 4, h: 5, minW: 3, minH: 4 },
+    { i: 'commodities', x: 4, y: 0, w: 4, h: 5, minW: 3, minH: 4 },
+    { i: 'forex-bonds', x: 0, y: 5, w: 4, h: 5, minW: 3, minH: 4 },
+    { i: 'market-overview', x: 4, y: 5, w: 4, h: 4, minW: 3, minH: 3 },
+    { i: 'fear-greed', x: 0, y: 10, w: 3, h: 4, minW: 2, minH: 3 },
+    { i: 'ai-briefing', x: 3, y: 10, w: 5, h: 4, minW: 3, minH: 3 },
+    { i: 'news', x: 0, y: 14, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'polymarket', x: 4, y: 14, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'macro', x: 0, y: 20, w: 8, h: 6, minW: 3, minH: 4 },
+    { i: 'crypto-heatmap', x: 0, y: 26, w: 8, h: 5, minW: 4, minH: 4 },
   ],
   sm: [
-    { i: 'market-overview', x: 0, y: 0, w: 6, h: 4, minW: 3, minH: 3 },
-    { i: 'fear-greed', x: 0, y: 4, w: 6, h: 4, minW: 2, minH: 3 },
-    { i: 'ai-briefing', x: 0, y: 8, w: 6, h: 4, minW: 3, minH: 3 },
-    { i: 'news', x: 0, y: 12, w: 6, h: 6, minW: 3, minH: 4 },
-    { i: 'polymarket', x: 0, y: 18, w: 6, h: 6, minW: 3, minH: 4 },
-    { i: 'macro', x: 0, y: 24, w: 6, h: 5, minW: 3, minH: 4 },
-    { i: 'crypto-heatmap', x: 0, y: 29, w: 6, h: 5, minW: 3, minH: 4 },
+    { i: 'global-equities', x: 0, y: 0, w: 6, h: 5, minW: 3, minH: 4 },
+    { i: 'commodities', x: 0, y: 5, w: 6, h: 5, minW: 3, minH: 4 },
+    { i: 'forex-bonds', x: 0, y: 10, w: 6, h: 5, minW: 3, minH: 4 },
+    { i: 'market-overview', x: 0, y: 15, w: 6, h: 4, minW: 3, minH: 3 },
+    { i: 'fear-greed', x: 0, y: 19, w: 6, h: 4, minW: 2, minH: 3 },
+    { i: 'ai-briefing', x: 0, y: 23, w: 6, h: 4, minW: 3, minH: 3 },
+    { i: 'news', x: 0, y: 27, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'polymarket', x: 0, y: 33, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'macro', x: 0, y: 39, w: 6, h: 5, minW: 3, minH: 4 },
+    { i: 'crypto-heatmap', x: 0, y: 44, w: 6, h: 5, minW: 3, minH: 4 },
   ],
 }
 
@@ -117,8 +129,23 @@ export default function App() {
           compactType="vertical"
           margin={[8, 8]}
         >
+          <div key="global-equities">
+            <WidgetPanel title="Global Indices" icon="trending-up" live>
+              <GlobalEquities />
+            </WidgetPanel>
+          </div>
+          <div key="commodities">
+            <WidgetPanel title="Commodities & Metals" icon="gem" live>
+              <CommoditiesMetals />
+            </WidgetPanel>
+          </div>
+          <div key="forex-bonds">
+            <WidgetPanel title="Forex & Bonds" icon="dollar" live>
+              <ForexBonds />
+            </WidgetPanel>
+          </div>
           <div key="market-overview">
-            <WidgetPanel title="Market Overview" icon="trending-up">
+            <WidgetPanel title="Crypto Overview" icon="trending-up">
               <MarketOverview />
             </WidgetPanel>
           </div>

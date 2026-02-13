@@ -4,6 +4,7 @@ export const API = {
   polymarket: (path: string) => `/api/polymarket${path}`,
   fng: (path: string) => `/api/fng${path}`,
   rss: (path: string) => `/api/rss${path}`,
+  yahoo: (path: string) => `/api/yahoo${path}`,
 }
 
 // Stagger fetches to avoid CoinGecko rate limits (max ~10 req/min on free tier)
