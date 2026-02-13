@@ -32,6 +32,7 @@ export default {
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'ticker': 'ticker 30s linear infinite',
+        'ticker-slow': 'ticker 45s linear infinite',
         'glow': 'glow 2s ease-in-out infinite alternate',
       },
       keyframes: {

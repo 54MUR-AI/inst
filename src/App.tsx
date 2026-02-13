@@ -3,6 +3,7 @@ import { Responsive, WidthProvider } from 'react-grid-layout'
 import type { Layouts, Layout } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
+import StockTickerTape from './components/StockTickerTape'
 import TickerTape from './components/TickerTape'
 import FearGreedGauge from './components/FearGreedGauge'
 import CryptoHeatmap from './components/CryptoHeatmap'
@@ -119,7 +120,8 @@ export default function App() {
         </button>
       </header>
 
-      {/* Ticker Tape */}
+      {/* Ticker Tapes */}
+      <StockTickerTape />
       <TickerTape />
 
       {/* Main Dashboard Grid */}
