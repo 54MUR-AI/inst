@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
+import { fetchFredData, type FredSeriesData } from '../lib/fred'
 
-interface FredSeries {
+interface DisplaySeries {
   label: string
   seriesId: string
   data: { date: string; value: number }[]
@@ -10,99 +11,91 @@ interface FredSeries {
   change?: string
 }
 
+const FALLBACK_DATA: DisplaySeries[] = [
+  {
+    label: 'Fed Funds Rate', seriesId: 'DFF', unit: '%', latestValue: '4.33', change: '-0.50',
+    data: [
+      { date: '2024-01', value: 5.33 }, { date: '2024-03', value: 5.33 },
+      { date: '2024-06', value: 5.33 }, { date: '2024-09', value: 4.83 },
+      { date: '2024-12', value: 4.33 }, { date: '2025-03', value: 4.33 },
+      { date: '2025-06', value: 4.08 }, { date: '2025-09', value: 3.83 },
+      { date: '2025-12', value: 3.58 }, { date: '2026-01', value: 3.33 },
+    ],
+  },
+  {
+    label: 'CPI (All Urban)', seriesId: 'CPIAUCSL', unit: 'Index', latestValue: '317.5', change: '+0.3',
+    data: [
+      { date: '2024-01', value: 308.4 }, { date: '2024-03', value: 310.1 },
+      { date: '2024-06', value: 312.3 }, { date: '2024-09', value: 314.1 },
+      { date: '2024-12', value: 315.6 }, { date: '2025-03', value: 316.2 },
+      { date: '2025-06', value: 316.8 }, { date: '2025-09', value: 317.1 },
+      { date: '2025-12', value: 317.3 }, { date: '2026-01', value: 317.5 },
+    ],
+  },
+  {
+    label: 'Unemployment Rate', seriesId: 'UNRATE', unit: '%', latestValue: '4.1', change: '+0.1',
+    data: [
+      { date: '2024-01', value: 3.7 }, { date: '2024-03', value: 3.8 },
+      { date: '2024-06', value: 4.1 }, { date: '2024-09', value: 4.2 },
+      { date: '2024-12', value: 4.2 }, { date: '2025-03', value: 4.0 },
+      { date: '2025-06', value: 4.0 }, { date: '2025-09', value: 4.1 },
+      { date: '2025-12', value: 4.0 }, { date: '2026-01', value: 4.1 },
+    ],
+  },
+  {
+    label: '10Y-2Y Spread', seriesId: 'T10Y2Y', unit: '%', latestValue: '0.29', change: '+0.45',
+    data: [
+      { date: '2024-01', value: -0.35 }, { date: '2024-03', value: -0.40 },
+      { date: '2024-06', value: -0.30 }, { date: '2024-09', value: -0.05 },
+      { date: '2024-12', value: 0.15 }, { date: '2025-03', value: 0.20 },
+      { date: '2025-06', value: 0.22 }, { date: '2025-09', value: 0.25 },
+      { date: '2025-12', value: 0.27 }, { date: '2026-01', value: 0.29 },
+    ],
+  },
+]
+
+function fredToDisplay(fred: FredSeriesData): DisplaySeries {
+  const fmt = (v: number) => Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) : v.toFixed(2)
+  const dir = fred.change >= 0 ? '+' : ''
+  return {
+    label: fred.label,
+    seriesId: fred.seriesId,
+    unit: fred.unit,
+    latestValue: fmt(fred.latestValue),
+    change: `${dir}${fred.change.toFixed(2)}`,
+    data: fred.observations.map(o => ({ date: o.date, value: o.value })),
+  }
+}
+
 export default function MacroDashboard() {
-  const [series, setSeries] = useState<FredSeries[]>([])
+  const [series, setSeries] = useState<DisplaySeries[]>([])
   const [loading, setLoading] = useState(true)
+  const [isLive, setIsLive] = useState(false)
   const [selectedSeries, setSelectedSeries] = useState<string>('DFF')
 
   useEffect(() => {
-    const fetchFredData = async () => {
-      // FRED API requires an API key for direct access
-      // For MVP, we use fallback data and will integrate LDGR API keys later
-      const fallbackData: FredSeries[] = [
-        {
-          label: 'Fed Funds Rate',
-          seriesId: 'DFF',
-          unit: '%',
-          latestValue: '4.33',
-          change: '-0.50',
-          data: [
-            { date: '2024-01', value: 5.33 },
-            { date: '2024-03', value: 5.33 },
-            { date: '2024-06', value: 5.33 },
-            { date: '2024-09', value: 4.83 },
-            { date: '2024-12', value: 4.33 },
-            { date: '2025-03', value: 4.33 },
-            { date: '2025-06', value: 4.08 },
-            { date: '2025-09', value: 3.83 },
-            { date: '2025-12', value: 3.58 },
-            { date: '2026-01', value: 3.33 },
-          ],
-        },
-        {
-          label: 'CPI (All Urban)',
-          seriesId: 'CPIAUCSL',
-          unit: 'Index',
-          latestValue: '317.5',
-          change: '+0.3',
-          data: [
-            { date: '2024-01', value: 308.4 },
-            { date: '2024-03', value: 310.1 },
-            { date: '2024-06', value: 312.3 },
-            { date: '2024-09', value: 314.1 },
-            { date: '2024-12', value: 315.6 },
-            { date: '2025-03', value: 316.2 },
-            { date: '2025-06', value: 316.8 },
-            { date: '2025-09', value: 317.1 },
-            { date: '2025-12', value: 317.3 },
-            { date: '2026-01', value: 317.5 },
-          ],
-        },
-        {
-          label: 'Unemployment Rate',
-          seriesId: 'UNRATE',
-          unit: '%',
-          latestValue: '4.1',
-          change: '+0.1',
-          data: [
-            { date: '2024-01', value: 3.7 },
-            { date: '2024-03', value: 3.8 },
-            { date: '2024-06', value: 4.1 },
-            { date: '2024-09', value: 4.2 },
-            { date: '2024-12', value: 4.2 },
-            { date: '2025-03', value: 4.0 },
-            { date: '2025-06', value: 4.0 },
-            { date: '2025-09', value: 4.1 },
-            { date: '2025-12', value: 4.0 },
-            { date: '2026-01', value: 4.1 },
-          ],
-        },
-        {
-          label: '10Y-2Y Spread',
-          seriesId: 'T10Y2Y',
-          unit: '%',
-          latestValue: '0.29',
-          change: '+0.45',
-          data: [
-            { date: '2024-01', value: -0.35 },
-            { date: '2024-03', value: -0.40 },
-            { date: '2024-06', value: -0.30 },
-            { date: '2024-09', value: -0.05 },
-            { date: '2024-12', value: 0.15 },
-            { date: '2025-03', value: 0.20 },
-            { date: '2025-06', value: 0.22 },
-            { date: '2025-09', value: 0.25 },
-            { date: '2025-12', value: 0.27 },
-            { date: '2026-01', value: 0.29 },
-          ],
-        },
-      ]
-
-      setSeries(fallbackData)
+    const load = async () => {
+      // Try real FRED data first (requires FRED key in LDGR)
+      try {
+        const fredData = await fetchFredData()
+        if (fredData && fredData.length > 0) {
+          setSeries(fredData.map(fredToDisplay))
+          setIsLive(true)
+          setLoading(false)
+          return
+        }
+      } catch (err) {
+        console.warn('[Macro] FRED fetch failed, using fallback:', err)
+      }
+      // Fallback to placeholder data
+      setSeries(FALLBACK_DATA)
+      setIsLive(false)
       setLoading(false)
     }
-
-    fetchFredData()
+    load()
+    // Refresh every 10 minutes if live
+    const interval = setInterval(load, 600_000)
+    return () => clearInterval(interval)
   }, [])
 
   if (loading) {
@@ -229,8 +222,11 @@ export default function MacroDashboard() {
       )}
 
       {/* FRED attribution */}
-      <div className="text-[8px] text-samurai-steel/50 text-center font-mono">
-        Data: Federal Reserve Economic Data (FRED) · Add FRED API key via LDGR for live data
+      <div className="text-[8px] text-samurai-steel/50 text-center font-mono flex items-center justify-center gap-1.5">
+        {isLive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+        {isLive
+          ? 'Live data from FRED API via LDGR key'
+          : 'Placeholder data · Add FRED API key in LDGR for live data'}
       </div>
     </div>
   )

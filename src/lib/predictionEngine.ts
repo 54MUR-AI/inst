@@ -1,6 +1,7 @@
 import { API, fetchCoinGecko } from './api'
 import { fetchQuotes, INDICES, METALS, ENERGY, FOREX, BONDS, POPULAR_STOCKS, calcGSR } from './yahooFinance'
 import type { YahooQuote } from './yahooFinance'
+import { buildFredContext } from './fred'
 
 export interface Prediction {
   asset: string; market: string; direction: 'LONG' | 'SHORT'
@@ -34,6 +35,7 @@ export interface PredictionSnapshot {
   topCoins: CoinDetail[]
   stocks: StockFundamentals[]
   headlines: { title: string; link: string; source: string }[]
+  fredContext: string | null
 }
 
 export async function gatherPredictionData(): Promise<PredictionSnapshot> {
@@ -66,7 +68,10 @@ export async function gatherPredictionData(): Promise<PredictionSnapshot> {
     if (!sq) return null
     return { symbol: s.symbol, name: s.name, price: sq.regularMarketPrice, changePct: sq.regularMarketChangePercent, volume: sq.regularMarketVolume, dayHigh: sq.regularMarketDayHigh, dayLow: sq.regularMarketDayLow }
   }).filter(Boolean) as StockFundamentals[]
-  return { indices: pick(INDICES.map(i => i.symbol)), metals: pick(METALS.map(m => m.symbol)), energy: pick(ENERGY.map(e => e.symbol)), forex: pick(FOREX.map(f => f.symbol)), bonds: pick(BONDS.map(b => b.symbol)), gsr: calcGSR(q), fng, crypto, topCoins, stocks, headlines: nR.status === 'fulfilled' ? nR.value : [] }
+  // Try to get FRED macro data (requires LDGR key)
+  let fredContext: string | null = null
+  try { fredContext = await buildFredContext() } catch {}
+  return { indices: pick(INDICES.map(i => i.symbol)), metals: pick(METALS.map(m => m.symbol)), energy: pick(ENERGY.map(e => e.symbol)), forex: pick(FOREX.map(f => f.symbol)), bonds: pick(BONDS.map(b => b.symbol)), gsr: calcGSR(q), fng, crypto, topCoins, stocks, headlines: nR.status === 'fulfilled' ? nR.value : [], fredContext }
 }
 
 async function fetchPredHeadlines(): Promise<{ title: string; link: string; source: string }[]> {
@@ -117,13 +122,14 @@ export function buildPredictionContext(snap: PredictionSnapshot): string {
     s.push('TOP STOCKS:\n' + stockLines.join('\n'))
   }
   if (snap.fng) s.push(`FEAR&GREED: ${snap.fng.value} (${snap.fng.classification})`)
+  if (snap.fredContext) s.push(snap.fredContext)
   if (snap.headlines.length) s.push('NEWS:\n' + snap.headlines.map(h => `  [${h.source}] ${h.title}`).join('\n'))
   return s.join('\n\n')
 }
 
 export const PREDICTION_PROMPT = `You are NSIT Predictions Engine, an elite quantitative trading analyst with access to real-time data AND fundamentals across all asset classes.
 
-You have: index prices, commodity prices, forex rates, bond yields, yield curve spread, Fear & Greed sentiment, crypto fundamentals (price, 7d/30d trends, supply metrics, ATH distance, market cap rank), and top stock fundamentals (price, volume, day range).
+You have: index prices, commodity prices, forex rates, bond yields, yield curve spread, Fear & Greed sentiment, crypto fundamentals (price, 7d/30d trends, supply metrics, ATH distance, market cap rank), top stock fundamentals (price, volume, day range), and when available, FRED macro data (Fed Funds Rate, CPI, unemployment, GDP, M2, VIX).
 
 Use fundamentals to inform picks:
 - For crypto: consider ATH distance (coins far from ATH may have upside), supply dynamics (low circ/total ratio = inflation risk), 7d/30d momentum divergence, market cap rank
