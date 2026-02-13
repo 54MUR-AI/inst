@@ -1,5 +1,5 @@
 import { ReactNode } from 'react'
-import { TrendingUp, Gauge, Brain, Grid3X3, GripVertical, Target, BarChart3, Newspaper, Gem, DollarSign, Crosshair } from 'lucide-react'
+import { TrendingUp, Gauge, Brain, Grid3X3, GripVertical, Target, BarChart3, Newspaper, Gem, DollarSign, Crosshair, Flame } from 'lucide-react'
 
 const ICONS: Record<string, ReactNode> = {
   'trending-up': <TrendingUp className="w-3.5 h-3.5" />,
@@ -12,6 +12,7 @@ const ICONS: Record<string, ReactNode> = {
   'gem': <Gem className="w-3.5 h-3.5" />,
   'dollar': <DollarSign className="w-3.5 h-3.5" />,
   'crosshair': <Crosshair className="w-3.5 h-3.5" />,
+  'flame': <Flame className="w-3.5 h-3.5" />,
 }
 
 interface WidgetPanelProps {

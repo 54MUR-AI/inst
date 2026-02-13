@@ -1,20 +1,23 @@
 import { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown } from 'lucide-react'
-import { fetchQuotes, FOREX, BONDS, type YahooQuote } from '../lib/yahooFinance'
+import { fetchQuotes, fetchSparklines, FOREX, BONDS, type YahooQuote } from '../lib/yahooFinance'
+import Sparkline from './Sparkline'
 
 export default function ForexBonds() {
   const [quotes, setQuotes] = useState<Map<string, YahooQuote>>(new Map())
+  const [sparks, setSparks] = useState<Map<string, number[]>>(new Map())
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'forex' | 'bonds'>('forex')
 
   useEffect(() => {
+    const symbols = [...FOREX, ...BONDS].map(f => f.symbol)
     const load = async () => {
-      const symbols = [...FOREX, ...BONDS].map(f => f.symbol)
       const data = await fetchQuotes(symbols)
       setQuotes(data)
       setLoading(false)
     }
     load()
+    fetchSparklines(symbols).then(setSparks)
     const interval = setInterval(load, 60_000)
     return () => clearInterval(interval)
   }, [])
@@ -65,6 +68,7 @@ export default function ForexBonds() {
             <thead>
               <tr className="text-samurai-steel font-mono border-b border-samurai-grey-dark/30">
                 <th className="text-left py-1 px-1">Pair</th>
+                <th className="text-center py-1 px-1 hidden sm:table-cell">5D</th>
                 <th className="text-right py-1 px-1">Rate</th>
                 <th className="text-right py-1 px-1">Chg%</th>
               </tr>
@@ -81,6 +85,9 @@ export default function ForexBonds() {
                         <span>{fx.flag}</span>
                         <span className="text-white font-medium">{fx.name}</span>
                       </div>
+                    </td>
+                    <td className="py-1.5 px-1 hidden sm:table-cell">
+                      <Sparkline data={sparks.get(fx.symbol) || []} width={44} height={14} positive={q.regularMarketChangePercent >= 0} />
                     </td>
                     <td className="text-right py-1.5 px-1 font-mono text-white">
                       {q.regularMarketPrice.toFixed(q.regularMarketPrice > 100 ? 2 : 4)}

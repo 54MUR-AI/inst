@@ -1,20 +1,23 @@
 import { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown } from 'lucide-react'
-import { fetchQuotes, METALS, ENERGY, calcGSR, type YahooQuote } from '../lib/yahooFinance'
+import { fetchQuotes, fetchSparklines, METALS, ENERGY, calcGSR, type YahooQuote } from '../lib/yahooFinance'
+import Sparkline from './Sparkline'
 
 export default function CommoditiesMetals() {
   const [quotes, setQuotes] = useState<Map<string, YahooQuote>>(new Map())
+  const [sparks, setSparks] = useState<Map<string, number[]>>(new Map())
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'metals' | 'energy'>('metals')
 
   useEffect(() => {
+    const symbols = [...METALS, ...ENERGY].map(m => m.symbol)
     const load = async () => {
-      const symbols = [...METALS, ...ENERGY].map(m => m.symbol)
       const data = await fetchQuotes(symbols)
       setQuotes(data)
       setLoading(false)
     }
     load()
+    fetchSparklines(symbols).then(setSparks)
     const interval = setInterval(load, 60_000)
     return () => clearInterval(interval)
   }, [])
@@ -64,9 +67,12 @@ export default function CommoditiesMetals() {
           return (
             <div key={item.symbol} className="bg-samurai-black rounded-md p-2 border border-samurai-grey-dark/30">
               <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-[11px] font-bold text-white">{item.name}</div>
-                  <div className="text-[9px] text-samurai-steel font-mono">{item.symbol.replace('=F', '')} COMEX</div>
+                <div className="flex items-center gap-2">
+                  <div>
+                    <div className="text-[11px] font-bold text-white">{item.name}</div>
+                    <div className="text-[9px] text-samurai-steel font-mono">{item.symbol.replace('=F', '')} COMEX</div>
+                  </div>
+                  <Sparkline data={sparks.get(item.symbol) || []} width={52} height={20} positive={q.regularMarketChangePercent >= 0} />
                 </div>
                 <div className="text-right">
                   <div className="text-[12px] font-mono font-bold text-white">

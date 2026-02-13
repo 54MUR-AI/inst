@@ -144,10 +144,56 @@ export const BONDS = [
   { symbol: '^TYX', name: '30-Year', tenor: '30Y' },
 ]
 
+// Popular stocks for fundamentals analysis in predictions
+export const POPULAR_STOCKS = [
+  { symbol: 'AAPL', name: 'Apple' },
+  { symbol: 'MSFT', name: 'Microsoft' },
+  { symbol: 'NVDA', name: 'NVIDIA' },
+  { symbol: 'GOOGL', name: 'Alphabet' },
+  { symbol: 'AMZN', name: 'Amazon' },
+  { symbol: 'META', name: 'Meta' },
+  { symbol: 'TSLA', name: 'Tesla' },
+  { symbol: 'JPM', name: 'JPMorgan' },
+  { symbol: 'V', name: 'Visa' },
+  { symbol: 'XOM', name: 'ExxonMobil' },
+]
+
 // Gold/Silver Ratio helper
 export function calcGSR(quotes: Map<string, YahooQuote>): number | null {
   const gold = quotes.get('GC=F')
   const silver = quotes.get('SI=F')
   if (!gold || !silver || silver.regularMarketPrice === 0) return null
   return gold.regularMarketPrice / silver.regularMarketPrice
+}
+
+// ── Sparkline data (5-day hourly closes) ──
+
+let sparkCache: { data: Map<string, number[]>; ts: number } = { data: new Map(), ts: 0 }
+const SPARK_CACHE_TTL = 300_000 // 5 minutes
+
+export async function fetchSparkline(symbol: string): Promise<number[]> {
+  if (Date.now() - sparkCache.ts < SPARK_CACHE_TTL && sparkCache.data.has(symbol)) {
+    return sparkCache.data.get(symbol)!
+  }
+  try {
+    const url = API.yahoo(`/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1h&range=5d`)
+    const res = await fetch(url)
+    if (!res.ok) return []
+    const json = await res.json()
+    const closes: number[] = json.chart?.result?.[0]?.indicators?.quote?.[0]?.close || []
+    const filtered = closes.filter((v: any) => v != null && !isNaN(v))
+    sparkCache.data.set(symbol, filtered)
+    sparkCache.ts = Date.now()
+    return filtered
+  } catch { return [] }
+}
+
+export async function fetchSparklines(symbols: string[]): Promise<Map<string, number[]>> {
+  const results = await Promise.allSettled(symbols.map(s => fetchSparkline(s)))
+  const map = new Map<string, number[]>()
+  symbols.forEach((s, i) => {
+    const r = results[i]
+    if (r.status === 'fulfilled' && r.value.length > 0) map.set(s, r.value)
+  })
+  return map
 }
