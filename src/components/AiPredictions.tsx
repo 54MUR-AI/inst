@@ -6,6 +6,7 @@ import {
   gatherPredictionData, buildPredictionContext, parsePredictions,
   PREDICTION_PROMPT, type Prediction, type PredictionSet, type PredictionSnapshot
 } from '../lib/predictionEngine'
+import { loadAiCache, saveAiCache } from '../lib/aiCache'
 
 interface AiPredictionsProps { selectedModel?: string }
 
@@ -19,6 +20,12 @@ export default function AiPredictions({ selectedModel }: AiPredictionsProps) {
   useEffect(() => {
     const unsub = ollamaProxy.onStatusChange(() => setOllamaAvailable(ollamaProxy.isAvailable))
     ollamaProxy.requestModels()
+    // Try loading cached predictions first
+    loadAiCache<PredictionSet>('predictions').then(cached => {
+      if (cached && cached.content) {
+        setPredictions(cached.content)
+      }
+    }).catch(() => {})
     gatherPredictionData().then(s => setSnapshot(s)).catch(() => {})
     return unsub
   }, [])
@@ -52,6 +59,7 @@ export default function AiPredictions({ selectedModel }: AiPredictionsProps) {
       const parsed = parsePredictions(response)
       if (!parsed) throw new Error('Could not parse predictions. Try a larger model (7B+) for better structured output.')
       setPredictions(parsed)
+      saveAiCache('predictions', parsed)
     } catch (err) { setError(err instanceof Error ? err.message : 'Failed') }
     setLoading(false)
   }, [snapshot, selectedModel])

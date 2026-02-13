@@ -5,6 +5,7 @@ import { fetchQuotes, INDICES, METALS, ENERGY, FOREX, BONDS, calcGSR } from '../
 import type { YahooQuote } from '../lib/yahooFinance'
 import ollamaProxy from '../lib/ollamaProxy'
 import { scrapeMultiple, checkHealth } from '../lib/scrpBridge'
+import { loadAiCache, saveAiCache } from '../lib/aiCache'
 
 interface BriefingItem {
   type: 'trend' | 'alert' | 'insight'
@@ -332,7 +333,17 @@ export default function AiBriefing({ selectedModel }: AiBriefingProps) {
   useEffect(() => {
     const unsub = ollamaProxy.onStatusChange(() => setOllamaAvailable(ollamaProxy.isAvailable))
     ollamaProxy.requestModels()
-    refreshBriefing()
+    // Try loading cached briefing first
+    loadAiCache<BriefingItem[]>('briefing').then(cached => {
+      if (cached && cached.content.length > 0) {
+        setItems(cached.content)
+        setLoading(false)
+        // Still refresh market data in background
+        gatherMarketData().then(snap => setSnapshot(snap)).catch(() => {})
+      } else {
+        refreshBriefing()
+      }
+    }).catch(() => refreshBriefing())
     return unsub
   }, [])
 
@@ -342,6 +353,7 @@ export default function AiBriefing({ selectedModel }: AiBriefingProps) {
       const snap = await gatherMarketData()
       setSnapshot(snap)
       const insights = generateLocalInsights(snap)
+      if (insights.length > 0) saveAiCache('briefing', insights)
       setItems(insights.length > 0 ? insights : [{
         type: 'insight', title: 'Initializing...', body: 'Gathering market intelligence across all asset classes.', timestamp: new Date().toLocaleTimeString(),
       }])
@@ -403,7 +415,11 @@ export default function AiBriefing({ selectedModel }: AiBriefingProps) {
           return { type, title: type === 'alert' ? '🤖 AI Alert' : type === 'trend' ? '🤖 AI Trend' : '🤖 AI Insight', body, timestamp: now }
         })
 
-      if (aiItems.length > 0) setItems(prev => [...aiItems, ...prev])
+      if (aiItems.length > 0) {
+        const merged = [...aiItems, ...items]
+        setItems(merged)
+        saveAiCache('briefing', merged)
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       setItems(prev => [{ type: 'alert', title: 'Ollama Error', body: `Deep analysis failed: ${msg}`, timestamp: new Date().toLocaleTimeString() }, ...prev])

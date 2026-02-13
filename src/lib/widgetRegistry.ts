@@ -27,14 +27,22 @@ export const WIDGETS: WidgetDef[] = [
   { id: 'crypto-heatmap', label: 'Crypto Heatmap', icon: 'grid', defaultVisible: true },
 ]
 
-const STORAGE_LAYOUTS = 'nsit-layouts'
-const STORAGE_VISIBILITY = 'nsit-widget-visibility'
+// Device class based on screen width — gives different storage per device type
+function getDeviceClass(): string {
+  const w = typeof window !== 'undefined' ? window.screen.width : 1920
+  if (w <= 768) return 'mobile'
+  if (w <= 1200) return 'tablet'
+  return 'desktop'
+}
+
+function layoutKey() { return `nsit-layouts-${getDeviceClass()}` }
+function visibilityKey() { return `nsit-widget-visibility-${getDeviceClass()}` }
 
 // ── Layout persistence ──
 
 export function loadSavedLayouts(): Record<string, any[]> | null {
   try {
-    const raw = localStorage.getItem(STORAGE_LAYOUTS)
+    const raw = localStorage.getItem(layoutKey())
     if (!raw) return null
     const parsed = JSON.parse(raw)
     // Basic validation: must have at least one breakpoint with an array
@@ -47,19 +55,19 @@ export function loadSavedLayouts(): Record<string, any[]> | null {
 
 export function saveLayouts(layouts: Record<string, any[]>) {
   try {
-    localStorage.setItem(STORAGE_LAYOUTS, JSON.stringify(layouts))
+    localStorage.setItem(layoutKey(), JSON.stringify(layouts))
   } catch { /* quota exceeded */ }
 }
 
 export function clearSavedLayouts() {
-  localStorage.removeItem(STORAGE_LAYOUTS)
+  localStorage.removeItem(layoutKey())
 }
 
 // ── Widget visibility ──
 
 export function loadVisibility(): Record<string, boolean> {
   try {
-    const raw = localStorage.getItem(STORAGE_VISIBILITY)
+    const raw = localStorage.getItem(visibilityKey())
     if (raw) return JSON.parse(raw)
   } catch { /* corrupt */ }
   // Default: all visible
@@ -70,6 +78,6 @@ export function loadVisibility(): Record<string, boolean> {
 
 export function saveVisibility(vis: Record<string, boolean>) {
   try {
-    localStorage.setItem(STORAGE_VISIBILITY, JSON.stringify(vis))
+    localStorage.setItem(visibilityKey(), JSON.stringify(vis))
   } catch { /* quota exceeded */ }
 }
