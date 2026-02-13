@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { API } from '../lib/api'
 
 interface FearGreedData {
   value: number
@@ -12,7 +13,7 @@ export default function FearGreedGauge() {
   useEffect(() => {
     const fetchFearGreed = async () => {
       try {
-        const res = await fetch('https://api.alternative.me/fng/?limit=1')
+        const res = await fetch(API.fng('/fng/?limit=1'))
         if (!res.ok) throw new Error('FNG API error')
         const json = await res.json()
         const entry = json.data[0]

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown } from 'lucide-react'
+import { fetchCoinGecko } from '../lib/api'
 
 interface MarketStat {
   label: string
@@ -15,7 +16,7 @@ export default function MarketOverview() {
   useEffect(() => {
     const fetchGlobal = async () => {
       try {
-        const res = await fetch('https://api.coingecko.com/api/v3/global')
+        const res = await fetchCoinGecko('/api/v3/global')
         if (!res.ok) throw new Error('CoinGecko global API error')
         const json = await res.json()
         const d = json.data

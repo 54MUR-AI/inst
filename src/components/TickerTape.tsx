@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown } from 'lucide-react'
+import { fetchCoinGecko } from '../lib/api'
 
 interface TickerItem {
   symbol: string
@@ -15,8 +16,8 @@ export default function TickerTape() {
     // Fetch top crypto tickers from CoinGecko
     const fetchTickers = async () => {
       try {
-        const res = await fetch(
-          'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=20&page=1&sparkline=false&price_change_percentage=24h'
+        const res = await fetchCoinGecko(
+          '/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=20&page=1&sparkline=false&price_change_percentage=24h'
         )
         if (!res.ok) throw new Error('CoinGecko API error')
         const data = await res.json()

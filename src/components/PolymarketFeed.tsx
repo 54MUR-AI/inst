@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, Clock, Users } from 'lucide-react'
+import { API } from '../lib/api'
 
 interface PolymarketEvent {
   id: string
@@ -40,7 +41,7 @@ export default function PolymarketFeed() {
     const fetchEvents = async () => {
       try {
         const res = await fetch(
-          'https://gamma-api.polymarket.com/events?order=id&ascending=false&closed=false&limit=20'
+          API.polymarket('/events?order=id&ascending=false&closed=false&limit=20')
         )
         if (!res.ok) throw new Error('Polymarket API error')
         const data: PolymarketEvent[] = await res.json()

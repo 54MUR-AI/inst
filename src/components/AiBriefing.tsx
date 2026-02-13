@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Brain, RefreshCw, AlertTriangle } from 'lucide-react'
+import { API, fetchCoinGecko } from '../lib/api'
 
 interface BriefingItem {
   type: 'trend' | 'alert' | 'insight'
@@ -50,8 +51,8 @@ export default function AiBriefing() {
     // Generate briefing from publicly available data
     try {
       const [fngRes, globalRes] = await Promise.allSettled([
-        fetch('https://api.alternative.me/fng/?limit=1'),
-        fetch('https://api.coingecko.com/api/v3/global'),
+        fetch(API.fng('/fng/?limit=1')),
+        fetchCoinGecko('/api/v3/global'),
       ])
 
       const briefings: BriefingItem[] = []
