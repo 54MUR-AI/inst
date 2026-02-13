@@ -103,8 +103,7 @@ export default function App() {
       {/* Header Bar */}
       <header className="flex-shrink-0 h-10 bg-samurai-black-lighter border-b border-samurai-grey-dark flex items-center px-4 gap-4">
         <div className="flex items-center gap-2">
-          <ScanEye className="w-4 h-4 text-samurai-red" />
-          <span className="text-sm font-bold text-white tracking-wider">NSIT</span>
+          <span className="text-sm font-bold text-white tracking-wider flex items-center">NS<ScanEye className="w-4 h-4 text-samurai-red inline-block mx-[1px]" />T</span>
           <span className="text-[10px] text-samurai-steel font-mono hidden sm:inline">Networked Speculation Intelligence Tool</span>
         </div>
         <div className="flex-1" />
