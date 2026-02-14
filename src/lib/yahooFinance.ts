@@ -23,7 +23,7 @@ export interface YahooQuote {
 }
 
 let cache: { data: Map<string, YahooQuote>; ts: number } = { data: new Map(), ts: 0 }
-const CACHE_TTL = 90_000 // 90 seconds
+const CACHE_TTL = 300_000 // 5 min (client-side simulation fills the gap)
 
 async function fetchSingleChart(symbol: string): Promise<YahooQuote | null> {
   try {
@@ -157,6 +157,59 @@ export const POPULAR_STOCKS = [
   { symbol: 'V', name: 'Visa' },
   { symbol: 'XOM', name: 'ExxonMobil' },
 ]
+
+/**
+ * Client-side price simulation (inspired by bloomberg-terminal project).
+ * Applies tiny random movements to cached quotes so the UI feels live
+ * between real API fetches. Call on a fast interval (5-10s).
+ * Only mutates price/change fields — never overwrites real API data.
+ */
+export function simulateQuoteUpdates(): Map<string, YahooQuote> {
+  if (cache.data.size === 0) return cache.data
+
+  for (const [sym, q] of cache.data) {
+    // 30% chance each symbol gets a micro-update
+    if (Math.random() > 0.30) continue
+
+    // Determine volatility multiplier by asset type
+    let vol = 0.02 // default: ±0.02% max move
+    if (sym.includes('=F')) vol = 0.04        // futures/commodities
+    else if (sym.includes('=X')) vol = 0.01   // forex (less volatile)
+    else if (sym.startsWith('^')) vol = 0.015 // indices
+    // crypto would be higher but CoinGecko handles that
+
+    const direction = Math.random() > 0.5 ? 1 : -1
+    const magnitude = Math.random() * vol
+    const priceDelta = q.regularMarketPrice * (magnitude / 100) * direction
+
+    const newPrice = +(q.regularMarketPrice + priceDelta).toFixed(
+      q.regularMarketPrice > 100 ? 2 : q.regularMarketPrice > 1 ? 4 : 6
+    )
+    const newChange = +(newPrice - q.regularMarketPreviousClose).toFixed(4)
+    const newChangePct = q.regularMarketPreviousClose !== 0
+      ? +((newChange / q.regularMarketPreviousClose) * 100).toFixed(4)
+      : 0
+
+    // Update high/low if breached
+    const newHigh = Math.max(q.regularMarketDayHigh, newPrice)
+    const newLow = Math.min(q.regularMarketDayLow, newPrice)
+
+    cache.data.set(sym, {
+      ...q,
+      regularMarketPrice: newPrice,
+      regularMarketChange: newChange,
+      regularMarketChangePercent: newChangePct,
+      regularMarketDayHigh: newHigh,
+      regularMarketDayLow: newLow,
+    })
+  }
+  return cache.data
+}
+
+/** Returns cached quotes without fetching. Useful for simulation ticks. */
+export function getCachedQuotes(): Map<string, YahooQuote> {
+  return cache.data
+}
 
 // Gold/Silver Ratio helper
 export function calcGSR(quotes: Map<string, YahooQuote>): number | null {
