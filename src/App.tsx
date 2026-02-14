@@ -28,7 +28,8 @@ import CommoditiesMetals from './components/CommoditiesMetals'
 import ForexBonds from './components/ForexBonds'
 import SettingsPanel from './components/SettingsPanel'
 import type { AiSettings } from './components/SettingsPanel'
-import { ScanEye, Zap } from 'lucide-react'
+import ConflictDashboard from './components/conflict/ConflictDashboard'
+import { ScanEye, Zap, TrendingUp, Crosshair } from 'lucide-react'
 import { setAuthToken, bootstrapAuth } from './lib/ldgrBridge'
 import { loadSavedLayouts, saveLayouts, loadVisibility, saveVisibility } from './lib/widgetRegistry'
 
@@ -109,6 +110,7 @@ export default function App() {
     return (saved as Layouts) || DEFAULT_LAYOUTS
   })
   const [isLive, setIsLive] = useState(true)
+  const [activeTab, setActiveTab] = useState<'economy' | 'conflict'>('economy')
   const [visibility, setVisibility] = useState<Record<string, boolean>>(loadVisibility)
   const [aiSettings, setAiSettings] = useState<AiSettings>({
     provider: localStorage.getItem('nsit-ai-provider') || 'ollama',
@@ -173,6 +175,32 @@ export default function App() {
           <span className="text-sm font-bold text-white tracking-wider flex items-center">NS<ScanEye className="w-4 h-4 text-samurai-red inline-block mx-[1px]" />T</span>
           <span className="text-[10px] text-samurai-steel font-mono hidden sm:inline">Networked Speculation Intelligence Tool</span>
         </div>
+        {/* Tab switcher */}
+        <div className="flex items-center gap-0.5 bg-samurai-grey-dark/40 rounded-md p-0.5">
+          <button
+            onClick={() => setActiveTab('economy')}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-mono font-bold transition-all ${
+              activeTab === 'economy'
+                ? 'bg-samurai-red/20 text-samurai-red'
+                : 'text-samurai-steel hover:text-white'
+            }`}
+          >
+            <TrendingUp className="w-3 h-3" />
+            ECONOMY
+          </button>
+          <button
+            onClick={() => setActiveTab('conflict')}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-mono font-bold transition-all ${
+              activeTab === 'conflict'
+                ? 'bg-red-600/20 text-red-500'
+                : 'text-samurai-steel hover:text-white'
+            }`}
+          >
+            <Crosshair className="w-3 h-3" />
+            CONFLICT
+          </button>
+        </div>
+
         <div className="flex-1" />
         <button
           onClick={() => setIsLive(!isLive)}
@@ -186,11 +214,18 @@ export default function App() {
         </button>
       </header>
 
-      {/* Ticker Tapes */}
-      <StockTickerTape />
-      <TickerTape />
+      {/* Ticker Tapes — Economy tab only */}
+      {activeTab === 'economy' && (
+        <>
+          <StockTickerTape />
+          <TickerTape />
+        </>
+      )}
 
-      {/* Main Dashboard Grid */}
+      {/* Main Content */}
+      {activeTab === 'conflict' ? (
+        <ConflictDashboard />
+      ) : (
       <main className="flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4">
         <ResponsiveGridLayout
           className="layout"
@@ -305,6 +340,7 @@ export default function App() {
           </div>}
         </ResponsiveGridLayout>
       </main>
+      )}
 
       {/* Settings Panel (toggled via RMG footer button) */}
       <SettingsPanel
