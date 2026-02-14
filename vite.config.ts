@@ -33,6 +33,11 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api\/yahoo/, ''),
         headers: { 'User-Agent': 'Mozilla/5.0' },
       },
+      '/api/fred': {
+        target: 'https://api.stlouisfed.org',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/fred/, ''),
+      },
     },
   },
   build: {

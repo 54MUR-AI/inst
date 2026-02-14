@@ -5,6 +5,7 @@
  */
 
 import { getApiKey } from './ldgrBridge'
+import { API } from './api'
 
 export interface FredObservation {
   date: string
@@ -33,7 +34,7 @@ export const FRED_SERIES = [
   { id: 'VIXCLS', label: 'VIX', unit: 'Index' },
 ] as const
 
-const FRED_BASE = 'https://api.stlouisfed.org/fred'
+const FRED_BASE = API.fred('/fred')
 
 let cachedKey: string | null = null
 let keyChecked = false
@@ -82,7 +83,7 @@ async function fetchSeries(
     const startDate = twoYearsAgo.toISOString().split('T')[0]
 
     const url = `${FRED_BASE}/series/observations?series_id=${seriesId}&api_key=${apiKey}&file_type=json&observation_start=${startDate}&sort_order=asc`
-    const res = await fetch(url)
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } })
     if (!res.ok) return null
 
     const json = await res.json()
@@ -172,7 +173,7 @@ export async function fetchFredObservationNear(
     end.setMonth(end.getMonth() + 1)
 
     const url = `${FRED_BASE}/series/observations?series_id=${seriesId}&api_key=${apiKey}&file_type=json&observation_start=${start.toISOString().split('T')[0]}&observation_end=${end.toISOString().split('T')[0]}&sort_order=desc&limit=2`
-    const res = await fetch(url)
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } })
     if (!res.ok) return null
 
     const json = await res.json()

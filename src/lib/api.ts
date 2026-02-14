@@ -5,6 +5,7 @@ export const API = {
   fng: (path: string) => `/api/fng${path}`,
   rss: (path: string) => `/api/rss${path}`,
   yahoo: (path: string) => `/api/yahoo${path}`,
+  fred: (path: string) => `/api/fred${path}`,
 }
 
 // CoinGecko rate-limiter with response cache
