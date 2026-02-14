@@ -28,7 +28,11 @@ function loadAlerts(): PriceAlert[] {
 }
 
 function saveAlerts(alerts: PriceAlert[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(alerts))
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(alerts))
+  } catch (err) {
+    console.warn('[PriceAlerts] Failed to save alerts:', err)
+  }
 }
 
 // ── Browser notification ──

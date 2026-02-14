@@ -35,7 +35,11 @@ function loadHoldings(): Holding[] {
 }
 
 function saveHoldings(holdings: Holding[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(holdings))
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(holdings))
+  } catch (err) {
+    console.warn('[Portfolio] Failed to save holdings:', err)
+  }
 }
 
 // ── Allocation colors ──

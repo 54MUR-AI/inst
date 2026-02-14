@@ -20,7 +20,11 @@ function loadWatchlist(): string[] {
 }
 
 function saveWatchlist(symbols: string[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(symbols))
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(symbols))
+  } catch (err) {
+    console.warn('[Watchlist] Failed to save:', err)
+  }
 }
 
 export default function Watchlist() {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
-import { fetchFredData, type FredSeriesData } from '../lib/fred'
+import { fetchFredData, loadCachedFredData, type FredSeriesData } from '../lib/fred'
 
 interface DisplaySeries {
   label: string
@@ -32,11 +32,26 @@ export default function MacroDashboard() {
   const [selectedSeries, setSelectedSeries] = useState<string>('DFF')
 
   useEffect(() => {
+    let mounted = true
+
     const load = async () => {
-      // Try real FRED data first (requires FRED key in LDGR)
+      // 1. Try Supabase cache first (instant load)
+      if (loading) {
+        try {
+          const cached = await loadCachedFredData()
+          if (cached && cached.length > 0 && mounted) {
+            setSeries(cached.map(fredToDisplay))
+            setIsLive(true)
+            setLoading(false)
+            // Continue to fetch fresh data in background
+          }
+        } catch { /* no cache */ }
+      }
+
+      // 2. Fetch fresh FRED data (requires FRED key in LDGR)
       try {
         const fredData = await fetchFredData()
-        if (fredData && fredData.length > 0) {
+        if (fredData && fredData.length > 0 && mounted) {
           setSeries(fredData.map(fredToDisplay))
           setIsLive(true)
           setLoading(false)
@@ -45,14 +60,16 @@ export default function MacroDashboard() {
       } catch (err) {
         console.warn('[Macro] FRED fetch failed:', err)
       }
-      // No fallback data — show empty state
-      setIsLive(false)
-      setLoading(false)
+      // No data at all — show empty state
+      if (mounted && loading) {
+        setIsLive(false)
+        setLoading(false)
+      }
     }
     load()
     // Refresh every 10 minutes if live
     const interval = setInterval(load, 600_000)
-    return () => clearInterval(interval)
+    return () => { mounted = false; clearInterval(interval) }
   }, [])
 
   if (loading) {

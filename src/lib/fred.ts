@@ -6,6 +6,7 @@
 
 import { getApiKey } from './ldgrBridge'
 import { API } from './api'
+import { saveAiCache, loadAiCache } from './aiCache'
 
 export interface FredObservation {
   date: string
@@ -71,7 +72,8 @@ async function fetchFred(path: string): Promise<Response> {
 let cachedKey: string | null = null
 let keyChecked = false
 let cachedData: { data: FredSeriesData[]; ts: number } | null = null
-const CACHE_TTL = 600_000 // 10 minutes
+const CACHE_TTL = 600_000 // 10 min in-memory
+const SUPABASE_CACHE_KEY = 'fred-macro'
 
 async function getFredKey(): Promise<string | null> {
   // Only cache a successful key lookup; retry on null so auth bootstrap has time
@@ -180,9 +182,31 @@ export async function fetchFredData(
 
   if (data.length > 0) {
     cachedData = { data, ts: Date.now() }
+    // Persist to Supabase for fast reload (fire-and-forget)
+    saveAiCache(SUPABASE_CACHE_KEY, data).catch(() => {})
   }
 
   return data.length > 0 ? data : null
+}
+
+/**
+ * Load FRED data from Supabase cache (instant load on revisit).
+ * Returns null if no cache or expired.
+ */
+export async function loadCachedFredData(): Promise<FredSeriesData[] | null> {
+  // Check in-memory first
+  if (cachedData && Date.now() - cachedData.ts < CACHE_TTL) {
+    return cachedData.data
+  }
+  // Try Supabase cache
+  try {
+    const cached = await loadAiCache<FredSeriesData[]>(SUPABASE_CACHE_KEY)
+    if (cached && cached.content && cached.content.length > 0) {
+      cachedData = { data: cached.content, ts: Date.now() }
+      return cached.content
+    }
+  } catch { /* no cache */ }
+  return null
 }
 
 /**
