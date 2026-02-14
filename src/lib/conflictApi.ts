@@ -136,16 +136,15 @@ export async function fetchMilitaryAircraft(): Promise<Aircraft[]> {
   return all.filter(a => isMilitaryIcao(a.icao24))
 }
 
-// ── ACLED — Conflict Events ──
-// ACLED blocks browser CORS — route through scrp-api proxy
+// ── Conflict Events (via GDELT Event API) ──
+// ACLED requires paid API key; using GDELT event search instead (free, no auth)
 const SCRP_API = 'https://scrp-api.onrender.com'
-const ACLED_API = `${SCRP_API}/acled`
 
-let acledCache: { data: ConflictEvent[]; ts: number } | null = null
-let acledFailed = false
-let acledFailedAt = 0
-const ACLED_CACHE_TTL = 600_000 // 10 min
-const ACLED_RETRY_BACKOFF = 120_000 // 2 min after failure before retrying
+let conflictEventsCache: { data: ConflictEvent[]; ts: number } | null = null
+let conflictEventsFailed = false
+let conflictEventsFailedAt = 0
+const CONFLICT_EVENTS_CACHE_TTL = 600_000 // 10 min
+const CONFLICT_EVENTS_RETRY_BACKOFF = 120_000 // 2 min after failure
 
 export async function fetchConflictEvents(options?: {
   country?: string
@@ -153,71 +152,82 @@ export async function fetchConflictEvents(options?: {
   eventType?: string
 }): Promise<ConflictEvent[]> {
   // Return cache if fresh
-  if (acledCache && Date.now() - acledCache.ts < ACLED_CACHE_TTL) {
-    let data = acledCache.data
+  if (conflictEventsCache && Date.now() - conflictEventsCache.ts < CONFLICT_EVENTS_CACHE_TTL) {
+    let data = conflictEventsCache.data
     if (options?.country) data = data.filter(e => e.country.toLowerCase().includes(options.country!.toLowerCase()))
     if (options?.eventType) data = data.filter(e => e.eventType === options.eventType)
     return data.slice(0, options?.limit || 100)
   }
 
   // Don't retry too soon after a failure
-  if (acledFailed && Date.now() - acledFailedAt < ACLED_RETRY_BACKOFF) {
-    return acledCache?.data || []
+  if (conflictEventsFailed && Date.now() - conflictEventsFailedAt < CONFLICT_EVENTS_RETRY_BACKOFF) {
+    return conflictEventsCache?.data || []
   }
 
   try {
+    // Fetch conflict news from GDELT and convert to event-like format
     const params = new URLSearchParams({
-      limit: '500',
-      order: 'desc',
+      query: 'conflict OR war OR battle OR airstrike OR bombing OR troops OR protest',
+      mode: 'ArtList',
+      maxrecords: '100',
+      format: 'json',
+      timespan: '7d',
+      sort: 'DateDesc',
     })
 
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-    params.set('event_date', thirtyDaysAgo.toISOString().split('T')[0])
-    params.set('event_date_where', '>=')
-
-    const res = await fetch(`${ACLED_API}?${params}`, { signal: AbortSignal.timeout(15000) })
+    const res = await fetch(`${SCRP_API}/gdelt?${params}`, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) {
-      acledFailed = true
-      acledFailedAt = Date.now()
-      return acledCache?.data || []
+      conflictEventsFailed = true
+      conflictEventsFailedAt = Date.now()
+      return conflictEventsCache?.data || []
     }
 
     const text = await res.text()
-    // Guard against non-JSON responses
     if (!text.startsWith('{') && !text.startsWith('[')) {
-      console.warn('[Conflict] ACLED returned non-JSON response')
-      acledFailed = true
-      acledFailedAt = Date.now()
-      return acledCache?.data || []
+      console.warn('[Conflict] GDELT events returned non-JSON')
+      conflictEventsFailed = true
+      conflictEventsFailedAt = Date.now()
+      return conflictEventsCache?.data || []
     }
 
     const json = JSON.parse(text)
-    const events: ConflictEvent[] = (json.data || []).map((e: any) => ({
-      id: e.data_id || e.event_id_cnty,
-      eventDate: e.event_date,
-      eventType: e.event_type,
-      subEventType: e.sub_event_type,
-      actor1: e.actor1,
-      actor2: e.actor2 || '',
-      country: e.country,
-      admin1: e.admin1,
-      location: e.location,
-      latitude: parseFloat(e.latitude),
-      longitude: parseFloat(e.longitude),
-      fatalities: parseInt(e.fatalities) || 0,
-      notes: e.notes || '',
-      source: e.source || '',
-    }))
+    const articles = json.articles || []
 
-    acledFailed = false
-    acledCache = { data: events, ts: Date.now() }
+    // Convert GDELT articles to ConflictEvent format
+    const events: ConflictEvent[] = articles.map((a: any, i: number) => {
+      const title = (a.title || '').toLowerCase()
+      let eventType = 'Strategic developments'
+      if (title.match(/battle|combat|fighting|clash/)) eventType = 'Battles'
+      else if (title.match(/airstrike|missile|bomb|explos|drone|shell/)) eventType = 'Explosions/Remote violence'
+      else if (title.match(/civilian|massacre|killed|dead|casualt/)) eventType = 'Violence against civilians'
+      else if (title.match(/protest|demonstrat|rally|march|riot/)) eventType = 'Protests'
+
+      return {
+        id: `gdelt-${i}-${Date.now()}`,
+        eventDate: a.seendate ? `${a.seendate.slice(0,4)}-${a.seendate.slice(4,6)}-${a.seendate.slice(6,8)}` : new Date().toISOString().split('T')[0],
+        eventType,
+        subEventType: eventType,
+        actor1: a.sourcecountry || 'Unknown',
+        actor2: '',
+        country: a.sourcecountry || 'Unknown',
+        admin1: '',
+        location: a.domain || '',
+        latitude: 0,
+        longitude: 0,
+        fatalities: 0,
+        notes: a.title || '',
+        source: a.domain || 'GDELT',
+      }
+    })
+
+    conflictEventsFailed = false
+    conflictEventsCache = { data: events, ts: Date.now() }
     return events.slice(0, options?.limit || 100)
   } catch (err) {
-    console.warn('[Conflict] ACLED fetch failed:', err)
-    acledFailed = true
-    acledFailedAt = Date.now()
-    return acledCache?.data || []
+    console.warn('[Conflict] Conflict events fetch failed:', err)
+    conflictEventsFailed = true
+    conflictEventsFailedAt = Date.now()
+    return conflictEventsCache?.data || []
   }
 }
 

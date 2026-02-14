@@ -120,7 +120,7 @@ export default function ConflictEventsFeed() {
       </div>
 
       <div className="text-[7px] text-samurai-steel/40 text-center font-mono">
-        ACLED · Last 30 days
+        GDELT Project · Last 7 days
       </div>
     </div>
   )
