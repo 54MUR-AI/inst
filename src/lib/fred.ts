@@ -59,10 +59,23 @@ async function fetchFred(path: string): Promise<Response> {
     // proxy failed, try fallback
   }
 
-  // Fallback: use corsproxy.io to bypass CORS
+  // Fallback: try multiple CORS proxies
   const directUrl = `${FRED_DIRECT}${path}`
-  const corsUrl = `https://corsproxy.io/?${encodeURIComponent(directUrl)}`
-  return fetch(corsUrl, { headers: { 'Accept': 'application/json' } })
+  const proxies = [
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`,
+    `https://corsproxy.io/?${encodeURIComponent(directUrl)}`,
+  ]
+  for (const corsUrl of proxies) {
+    try {
+      const res = await fetch(corsUrl, { headers: { 'Accept': 'application/json' } })
+      if (res.ok) return res
+      console.warn(`[FRED] CORS proxy returned ${res.status}: ${corsUrl.split('?')[0]}`)
+    } catch (err) {
+      console.warn(`[FRED] CORS proxy failed: ${corsUrl.split('?')[0]}`, err)
+    }
+  }
+  // All proxies failed
+  return new Response(null, { status: 502, statusText: 'All FRED proxies failed' })
 }
 
 let cachedKey: string | null = null
