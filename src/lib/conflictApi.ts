@@ -1,7 +1,10 @@
 /**
  * Conflict data APIs — OpenSky, ACLED, NASA FIRMS, GDELT
- * All free-tier, no API keys required (except FIRMS which uses a demo key).
+ * OpenSky supports authenticated requests via LDGR API key (username:password).
+ * Authenticated users get 4x rate limit (4000 req/day vs 400).
  */
+
+import { getApiKey } from './ldgrBridge'
 
 // ── Types ──
 
@@ -116,7 +119,18 @@ async function _fetchLiveAircraftImpl(bounds?: {
       url += `?lamin=${bounds.lamin}&lomin=${bounds.lomin}&lamax=${bounds.lamax}&lomax=${bounds.lomax}`
     }
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) })
+    // Try to get OpenSky credentials from LDGR for authenticated requests (4x rate limit)
+    const headers: Record<string, string> = {}
+    try {
+      const creds = await getApiKey('opensky')
+      if (creds) {
+        // Key stored as 'username:password'
+        headers['Authorization'] = 'Basic ' + btoa(creds)
+        console.log('[Conflict] Using authenticated OpenSky request')
+      }
+    } catch { /* no key available, use anonymous */ }
+
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000), headers })
     if (!res.ok) {
       if (res.status === 429) {
         openskyFailed = true
