@@ -1,16 +1,58 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import type { Aircraft, ConflictEvent, Hotspot } from '../../lib/conflictApi'
+import type { Aircraft, ConflictEvent, Hotspot, CyberEvent } from '../../lib/conflictApi'
+
+// Approximate country centroids for cyber event map markers
+const COUNTRY_COORDS: Record<string, [number, number]> = {
+  'United States': [-98, 38], 'United Kingdom': [-1.5, 53], 'China': [104, 35],
+  'Russia': [60, 60], 'India': [78, 22], 'Germany': [10, 51], 'France': [2, 47],
+  'Japan': [138, 36], 'South Korea': [128, 36], 'North Korea': [127, 40],
+  'Iran': [53, 32], 'Israel': [35, 31], 'Ukraine': [32, 49], 'Brazil': [-51, -10],
+  'Australia': [134, -25], 'Canada': [-106, 56], 'Turkey': [35, 39],
+  'Saudi Arabia': [45, 24], 'Pakistan': [69, 30], 'Taiwan': [121, 24],
+  'Netherlands': [5, 52], 'Singapore': [104, 1.3], 'Italy': [12, 42],
+  'Spain': [-4, 40], 'Poland': [20, 52], 'Mexico': [-102, 23],
+  'Indonesia': [118, -2], 'Nigeria': [8, 10], 'South Africa': [25, -29],
+  'Egypt': [30, 27], 'Sweden': [15, 62], 'Switzerland': [8, 47],
+  'Norway': [10, 62], 'Finland': [26, 64], 'Romania': [25, 46],
+  'Czech Republic': [15, 50], 'Vietnam': [108, 16], 'Thailand': [101, 15],
+  'Philippines': [122, 13], 'Malaysia': [110, 4], 'Colombia': [-74, 4],
+  'Argentina': [-64, -34], 'Chile': [-71, -35], 'Kenya': [38, 0],
+  'Ethiopia': [40, 9], 'Bangladesh': [90, 24], 'Myanmar': [96, 20],
+}
+
+function countryToCoords(country: string): [number, number] | null {
+  if (!country) return null
+  // Try exact match first
+  if (COUNTRY_COORDS[country]) return COUNTRY_COORDS[country]
+  // Try partial match
+  const lower = country.toLowerCase()
+  for (const [k, v] of Object.entries(COUNTRY_COORDS)) {
+    if (k.toLowerCase().includes(lower) || lower.includes(k.toLowerCase())) return v
+  }
+  return null
+}
+
+const CYBER_CATEGORY_COLORS: Record<string, string> = {
+  ransomware: '#e63946',
+  apt: '#f97316',
+  ddos: '#eab308',
+  breach: '#ef4444',
+  vulnerability: '#8b5cf6',
+  cyber: '#06b6d4',
+}
 
 interface ConflictMapProps {
   aircraft: Aircraft[]
   events: ConflictEvent[]
   hotspots: Hotspot[]
+  cyberEvents?: CyberEvent[]
   layers: {
     aircraft: boolean
     events: boolean
     hotspots: boolean
+    cyber?: boolean
   }
   onBoundsChange?: (bounds: { lamin: number; lomin: number; lamax: number; lomax: number }) => void
 }
@@ -41,7 +83,7 @@ const DARK_STYLE = {
   ],
 }
 
-export default function ConflictMap({ aircraft, events, hotspots, layers, onBoundsChange }: ConflictMapProps) {
+export default function ConflictMap({ aircraft, events, hotspots, cyberEvents = [], layers, onBoundsChange }: ConflictMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const markersRef = useRef<maplibregl.Marker[]>([])
@@ -177,8 +219,57 @@ export default function ConflictMap({ aircraft, events, hotspots, layers, onBoun
       })
     }
 
+    // Cyber event markers
+    if (layers.cyber && cyberEvents.length > 0) {
+      // Group by country to avoid stacking
+      const byCountry = new Map<string, CyberEvent[]>()
+      cyberEvents.forEach(ce => {
+        const key = ce.sourcecountry || 'Unknown'
+        if (!byCountry.has(key)) byCountry.set(key, [])
+        byCountry.get(key)!.push(ce)
+      })
+
+      byCountry.forEach((evts, country) => {
+        const coords = countryToCoords(country)
+        if (!coords) return
+
+        // Offset slightly so they don't overlap with conflict events
+        const lng = coords[0] + (Math.random() - 0.5) * 2
+        const lat = coords[1] + (Math.random() - 0.5) * 2
+
+        const topEvt = evts[0]
+        const color = CYBER_CATEGORY_COLORS[topEvt.category] || '#06b6d4'
+        const size = Math.min(8 + evts.length * 2, 20)
+
+        const el = document.createElement('div')
+        el.className = 'conflict-marker cyber-marker'
+        el.innerHTML = `<div style="width:${size}px;height:${size}px;position:relative;"><div style="width:100%;height:100%;background:${color}40;border:1.5px solid ${color};border-radius:2px;transform:rotate(45deg);"></div><div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:7px;color:${color};font-weight:bold;">${evts.length}</div></div>`
+        el.title = `${evts.length} cyber event${evts.length > 1 ? 's' : ''} — ${country}`
+
+        const popupHtml = evts.slice(0, 5).map(e => {
+          const c = CYBER_CATEGORY_COLORS[e.category] || '#06b6d4'
+          return `<div style="margin-bottom:3px;"><span style="color:${c};font-weight:bold;">[${e.category.toUpperCase()}]</span> ${e.title.slice(0, 80)}</div>`
+        }).join('')
+
+        const popup = new maplibregl.Popup({ offset: 12, closeButton: false, className: 'nsit-popup' })
+          .setHTML(`
+            <div style="font-family:monospace;font-size:9px;color:#fff;background:#1a1a1a;padding:6px 8px;border:1px solid #333;border-radius:4px;max-width:300px;">
+              <div style="font-weight:bold;color:#06b6d4;margin-bottom:4px;">CYBER — ${country} (${evts.length})</div>
+              ${popupHtml}
+              ${evts.length > 5 ? `<div style="color:#666;">+${evts.length - 5} more</div>` : ''}
+            </div>
+          `)
+
+        const marker = new maplibregl.Marker({ element: el })
+          .setLngLat([lng, lat])
+          .setPopup(popup)
+          .addTo(mapRef.current!)
+        newMarkers.push(marker)
+      })
+    }
+
     markersRef.current = newMarkers
-  }, [aircraft, events, hotspots, layers, mapReady, clearMarkers])
+  }, [aircraft, events, hotspots, cyberEvents, layers, mapReady, clearMarkers])
 
   return (
     <div ref={containerRef} className="w-full h-full rounded-md overflow-hidden" style={{ minHeight: 300 }} />

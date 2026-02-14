@@ -13,8 +13,8 @@ import ThreatAssessment from './ThreatAssessment'
 import NuclearThreatLevel from './NuclearThreatLevel'
 import CyberThreatFeed from './CyberThreatFeed'
 import type { GisLayer } from './GisOverlayManager'
-import type { Aircraft, ConflictEvent, Hotspot } from '../../lib/conflictApi'
-import { fetchMilitaryAircraft, fetchConflictEvents, fetchHotspots } from '../../lib/conflictApi'
+import type { Aircraft, ConflictEvent, Hotspot, CyberEvent } from '../../lib/conflictApi'
+import { fetchMilitaryAircraft, fetchConflictEvents, fetchHotspots, fetchCyberNews } from '../../lib/conflictApi'
 
 const ResponsiveGridLayout = WidthProvider(Responsive)
 
@@ -85,18 +85,21 @@ export default function ConflictDashboard() {
   const [aircraft, setAircraft] = useState<Aircraft[]>([])
   const [events, setEvents] = useState<ConflictEvent[]>([])
   const [hotspots, setHotspots] = useState<Hotspot[]>([])
-  const [mapLayers, setMapLayers] = useState({ aircraft: true, events: true, hotspots: true })
+  const [cyberEvents, setCyberEvents] = useState<CyberEvent[]>([])
+  const [mapLayers, setMapLayers] = useState({ aircraft: true, events: true, hotspots: true, cyber: true })
 
   // Fetch data for the map
   const refreshMapData = useCallback(async () => {
-    const [ac, ev, hs] = await Promise.allSettled([
+    const [ac, ev, hs, cy] = await Promise.allSettled([
       fetchMilitaryAircraft(),
       fetchConflictEvents({ limit: 200 }),
       fetchHotspots(),
+      fetchCyberNews(),
     ])
     if (ac.status === 'fulfilled') setAircraft(ac.value)
     if (ev.status === 'fulfilled') setEvents(ev.value)
     if (hs.status === 'fulfilled') setHotspots(hs.value)
+    if (cy.status === 'fulfilled') setCyberEvents(cy.value)
   }, [])
 
   useEffect(() => {
@@ -119,6 +122,7 @@ export default function ConflictDashboard() {
           { key: 'aircraft' as const, label: 'Aircraft', color: '#00bcd4' },
           { key: 'events' as const, label: 'Events', color: '#e63946' },
           { key: 'hotspots' as const, label: 'Hotspots', color: '#f97316' },
+          { key: 'cyber' as const, label: 'Cyber', color: '#8b5cf6' },
         ]).map(l => (
           <button
             key={l.key}
@@ -152,6 +156,7 @@ export default function ConflictDashboard() {
               aircraft={aircraft}
               events={events}
               hotspots={hotspots}
+              cyberEvents={cyberEvents}
               layers={mapLayers}
             />
           </WidgetPanel>
