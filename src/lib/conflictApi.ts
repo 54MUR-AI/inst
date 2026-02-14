@@ -86,13 +86,21 @@ function isMilitaryIcao(icao24: string): boolean {
 }
 
 let aircraftCache: { data: Aircraft[]; ts: number } | null = null
-const AIRCRAFT_CACHE_TTL = 15_000 // 15s
+let openskyFailed = false
+let openskyFailedAt = 0
+const AIRCRAFT_CACHE_TTL = 60_000 // 1 min (OpenSky rate-limits aggressively)
+const OPENSKY_RETRY_BACKOFF = 120_000 // 2 min after 429
 
 export async function fetchLiveAircraft(bounds?: {
   lamin: number; lomin: number; lamax: number; lomax: number
 }): Promise<Aircraft[]> {
   if (aircraftCache && Date.now() - aircraftCache.ts < AIRCRAFT_CACHE_TTL) {
     return aircraftCache.data
+  }
+
+  // Don't retry too soon after rate limit
+  if (openskyFailed && Date.now() - openskyFailedAt < OPENSKY_RETRY_BACKOFF) {
+    return aircraftCache?.data || []
   }
 
   try {
@@ -102,7 +110,13 @@ export async function fetchLiveAircraft(bounds?: {
     }
 
     const res = await fetch(url, { signal: AbortSignal.timeout(10000) })
-    if (!res.ok) return aircraftCache?.data || []
+    if (!res.ok) {
+      if (res.status === 429) {
+        openskyFailed = true
+        openskyFailedAt = Date.now()
+      }
+      return aircraftCache?.data || []
+    }
 
     const json = await res.json()
     const states: any[][] = json.states || []
@@ -123,10 +137,13 @@ export async function fetchLiveAircraft(bounds?: {
         category: s[17] || 0,
       }))
 
+    openskyFailed = false
     aircraftCache = { data: aircraft, ts: Date.now() }
     return aircraft
   } catch (err) {
     console.warn('[Conflict] OpenSky fetch failed:', err)
+    openskyFailed = true
+    openskyFailedAt = Date.now()
     return aircraftCache?.data || []
   }
 }
@@ -175,8 +192,9 @@ export async function fetchConflictEvents(options?: {
       sort: 'DateDesc',
     })
 
-    const res = await fetch(`${SCRP_API}/gdelt?${params}`, { signal: AbortSignal.timeout(15000) })
+    const res = await fetch(`${SCRP_API}/gdelt?${params}`, { signal: AbortSignal.timeout(30000) })
     if (!res.ok) {
+      if (res.status === 429) console.warn('[Conflict] GDELT rate limited (429)')
       conflictEventsFailed = true
       conflictEventsFailedAt = Date.now()
       return conflictEventsCache?.data || []
@@ -327,8 +345,9 @@ export async function fetchConflictNews(query?: string): Promise<GdeltEvent[]> {
       sort: 'DateDesc',
     })
 
-    const res = await fetch(`${GDELT_DOC_API}?${params}`, { signal: AbortSignal.timeout(10000) })
+    const res = await fetch(`${GDELT_DOC_API}?${params}`, { signal: AbortSignal.timeout(30000) })
     if (!res.ok) {
+      if (res.status === 429) console.warn('[Conflict] GDELT news rate limited (429)')
       gdeltFailed = true
       gdeltFailedAt = Date.now()
       return gdeltNewsCache?.data || []

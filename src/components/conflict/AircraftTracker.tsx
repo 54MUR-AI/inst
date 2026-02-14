@@ -19,7 +19,7 @@ export default function AircraftTracker() {
   useEffect(() => {
     setLoading(true)
     refresh()
-    const iv = setInterval(refresh, 15_000)
+    const iv = setInterval(refresh, 60_000) // 1 min — matches OpenSky cache TTL
     return () => clearInterval(iv)
   }, [refresh])
 

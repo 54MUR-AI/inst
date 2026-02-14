@@ -93,7 +93,7 @@ export default function ConflictDashboard() {
 
   useEffect(() => {
     refreshMapData()
-    const iv = setInterval(refreshMapData, 30_000)
+    const iv = setInterval(refreshMapData, 120_000) // 2 min — caches handle freshness
     return () => clearInterval(iv)
   }, [refreshMapData])
 
