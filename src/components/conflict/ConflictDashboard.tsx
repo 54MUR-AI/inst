@@ -11,6 +11,7 @@ import HotspotDetection from './HotspotDetection'
 import GisOverlayManager from './GisOverlayManager'
 import ThreatAssessment from './ThreatAssessment'
 import NuclearThreatLevel from './NuclearThreatLevel'
+import CyberThreatFeed from './CyberThreatFeed'
 import type { GisLayer } from './GisOverlayManager'
 import type { Aircraft, ConflictEvent, Hotspot } from '../../lib/conflictApi'
 import { fetchMilitaryAircraft, fetchConflictEvents, fetchHotspots } from '../../lib/conflictApi'
@@ -24,10 +25,11 @@ const CONFLICT_LAYOUTS: Layouts = {
     { i: 'aircraft-tracker', x: 0, y: 8, w: 4, h: 6, minW: 3, minH: 4 },
     { i: 'conflict-events', x: 4, y: 8, w: 4, h: 6, minW: 3, minH: 4 },
     { i: 'conflict-news', x: 8, y: 8, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'hotspot-detection', x: 0, y: 14, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'defense-stocks', x: 4, y: 14, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'nuclear-threat', x: 8, y: 14, w: 4, h: 8, minW: 3, minH: 6 },
-    { i: 'gis-overlays', x: 0, y: 20, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'cyber-threats', x: 0, y: 14, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'hotspot-detection', x: 4, y: 14, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'defense-stocks', x: 8, y: 14, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'nuclear-threat', x: 0, y: 20, w: 4, h: 8, minW: 3, minH: 6 },
+    { i: 'gis-overlays', x: 4, y: 20, w: 4, h: 6, minW: 3, minH: 4 },
   ],
   md: [
     { i: 'conflict-map', x: 0, y: 0, w: 8, h: 7, minW: 5, minH: 5 },
@@ -35,10 +37,11 @@ const CONFLICT_LAYOUTS: Layouts = {
     { i: 'aircraft-tracker', x: 4, y: 7, w: 4, h: 6, minW: 3, minH: 4 },
     { i: 'conflict-events', x: 0, y: 13, w: 4, h: 6, minW: 3, minH: 4 },
     { i: 'conflict-news', x: 4, y: 13, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'hotspot-detection', x: 0, y: 19, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'defense-stocks', x: 4, y: 19, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'nuclear-threat', x: 0, y: 25, w: 4, h: 8, minW: 3, minH: 6 },
-    { i: 'gis-overlays', x: 4, y: 25, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'cyber-threats', x: 0, y: 19, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'hotspot-detection', x: 4, y: 19, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'defense-stocks', x: 0, y: 25, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'nuclear-threat', x: 4, y: 25, w: 4, h: 8, minW: 3, minH: 6 },
+    { i: 'gis-overlays', x: 0, y: 33, w: 4, h: 6, minW: 3, minH: 4 },
   ],
   sm: [
     { i: 'conflict-map', x: 0, y: 0, w: 6, h: 6, minW: 4, minH: 5 },
@@ -46,17 +49,21 @@ const CONFLICT_LAYOUTS: Layouts = {
     { i: 'aircraft-tracker', x: 0, y: 12, w: 6, h: 6, minW: 3, minH: 4 },
     { i: 'conflict-events', x: 0, y: 18, w: 6, h: 6, minW: 3, minH: 4 },
     { i: 'conflict-news', x: 0, y: 24, w: 6, h: 6, minW: 3, minH: 4 },
-    { i: 'hotspot-detection', x: 0, y: 30, w: 6, h: 6, minW: 3, minH: 4 },
-    { i: 'defense-stocks', x: 0, y: 36, w: 6, h: 6, minW: 3, minH: 4 },
-    { i: 'nuclear-threat', x: 0, y: 42, w: 6, h: 8, minW: 3, minH: 6 },
-    { i: 'gis-overlays', x: 0, y: 50, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'cyber-threats', x: 0, y: 30, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'hotspot-detection', x: 0, y: 36, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'defense-stocks', x: 0, y: 42, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'nuclear-threat', x: 0, y: 48, w: 6, h: 8, minW: 3, minH: 6 },
+    { i: 'gis-overlays', x: 0, y: 56, w: 6, h: 6, minW: 3, minH: 4 },
   ],
 }
 
 const LAYOUT_STORAGE_KEY = 'nsit-conflict-layouts'
+const LAYOUT_VERSION = 2 // bump when adding/removing widgets to force layout reset
 
 function loadConflictLayouts(): Layouts | null {
   try {
+    const ver = localStorage.getItem(LAYOUT_STORAGE_KEY + '-ver')
+    if (ver !== String(LAYOUT_VERSION)) return null // version mismatch → use defaults
     const raw = localStorage.getItem(LAYOUT_STORAGE_KEY)
     if (raw) return JSON.parse(raw)
   } catch { /* corrupt */ }
@@ -66,6 +73,7 @@ function loadConflictLayouts(): Layouts | null {
 function saveConflictLayouts(layouts: Layouts) {
   try {
     localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layouts))
+    localStorage.setItem(LAYOUT_STORAGE_KEY + '-ver', String(LAYOUT_VERSION))
   } catch { /* quota */ }
 }
 
@@ -181,6 +189,11 @@ export default function ConflictDashboard() {
         <div key="nuclear-threat">
           <WidgetPanel title="Nuclear Threat Level" icon="alert-triangle">
             <NuclearThreatLevel />
+          </WidgetPanel>
+        </div>
+        <div key="cyber-threats">
+          <WidgetPanel title="Cyber Threats" icon="shield" live>
+            <CyberThreatFeed />
           </WidgetPanel>
         </div>
         <div key="gis-overlays">

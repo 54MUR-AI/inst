@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { ShieldAlert, RefreshCw, Brain } from 'lucide-react'
-import { fetchConflictEvents, fetchConflictNews } from '../../lib/conflictApi'
+import { fetchConflictEvents, fetchConflictNews, fetchLatestCVEs, fetchCyberNews } from '../../lib/conflictApi'
 import { saveAiCache, loadAiCache } from '../../lib/aiCache'
 import ollamaProxy from '../../lib/ollamaProxy'
 
@@ -13,23 +13,30 @@ interface ThreatBriefing {
 
 const CACHE_KEY = 'conflict-threat'
 
-function buildPrompt(eventCount: number, fatalityCount: number, topCountries: string[], headlines: string[]): string {
-  return `You are a military intelligence analyst. Based on the following conflict data from the last 30 days, provide a concise threat assessment briefing.
+function buildPrompt(
+  eventCount: number, fatalityCount: number, topCountries: string[],
+  headlines: string[], cyberHeadlines: string[], criticalCves: number
+): string {
+  return `You are a military and cyber intelligence analyst. Based on the following conflict and cyber threat data, provide a concise threat assessment briefing.
 
-DATA:
+KINETIC DATA:
 - ${eventCount} conflict events recorded globally
 - ${fatalityCount} total fatalities
 - Most affected countries: ${topCountries.join(', ')}
-- Recent headlines: ${headlines.slice(0, 5).join(' | ')}
+- Recent conflict headlines: ${headlines.slice(0, 5).join(' | ')}
+
+CYBER DATA:
+- ${criticalCves} critical CVEs (CVSS ≥ 9.0) in the last 48h
+- Recent cyber headlines: ${cyberHeadlines.slice(0, 5).join(' | ')}
 
 Respond in this EXACT JSON format (no markdown, no code blocks):
 {
-  "summary": "2-3 sentence executive summary of global conflict situation",
+  "summary": "2-3 sentence executive summary covering BOTH kinetic conflict and cyber threat landscape",
   "hotZones": ["zone1", "zone2", "zone3", "zone4", "zone5"],
   "threatLevel": "LOW|MODERATE|ELEVATED|HIGH|CRITICAL"
 }
 
-Be factual and concise. Hot zones should be specific regions/countries.`
+Be factual and concise. Hot zones should be specific regions/countries. Factor cyber threats into the overall threat level.`
 }
 
 const THREAT_COLORS: Record<string, string> = {
@@ -62,10 +69,12 @@ export default function ThreatAssessment() {
     }
 
     try {
-      // Gather data
-      const [events, news] = await Promise.all([
+      // Gather kinetic + cyber data
+      const [events, news, cyberNews, cves] = await Promise.all([
         fetchConflictEvents({ limit: 500 }),
         fetchConflictNews(),
+        fetchCyberNews(),
+        fetchLatestCVEs(30),
       ])
 
       const fatalityCount = events.reduce((s, e) => s + e.fatalities, 0)
@@ -77,8 +86,10 @@ export default function ThreatAssessment() {
         .map(([c, n]) => `${c} (${n})`)
 
       const headlines = news.slice(0, 10).map(a => a.title)
+      const cyberHeadlines = cyberNews.slice(0, 10).map(a => a.title)
+      const criticalCves = cves.filter(c => (c.cvss ?? 0) >= 9).length
 
-      const prompt = buildPrompt(events.length, fatalityCount, topCountries, headlines)
+      const prompt = buildPrompt(events.length, fatalityCount, topCountries, headlines, cyberHeadlines, criticalCves)
 
       // Use Ollama via RMG Bridge extension (works in iframe context)
       const aiModel = localStorage.getItem('nsit-ai-model') || 'llama3.2'

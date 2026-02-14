@@ -392,6 +392,142 @@ export async function fetchConflictNews(query?: string): Promise<GdeltEvent[]> {
   }
 }
 
+// ── CYBER — CVE Feed + Cyber Threat News ──
+
+export interface CveEntry {
+  id: string
+  summary: string
+  cvss: number | null
+  published: string
+  modified: string
+  references: string[]
+}
+
+export interface CyberEvent {
+  id: string
+  title: string
+  url: string
+  domain: string
+  category: 'ransomware' | 'apt' | 'ddos' | 'breach' | 'vulnerability' | 'cyber'
+  sourcecountry: string
+  dateadded: string
+  tone: number
+}
+
+let cveCache: { data: CveEntry[]; ts: number } | null = null
+let cveFailed = false
+let cveFailedAt = 0
+const CVE_CACHE_TTL = 600_000 // 10 min
+const CVE_RETRY_BACKOFF = 120_000
+
+export async function fetchLatestCVEs(limit = 30): Promise<CveEntry[]> {
+  if (cveCache && Date.now() - cveCache.ts < CVE_CACHE_TTL) {
+    return cveCache.data.slice(0, limit)
+  }
+  if (cveFailed && Date.now() - cveFailedAt < CVE_RETRY_BACKOFF) {
+    return cveCache?.data?.slice(0, limit) || []
+  }
+
+  try {
+    const res = await fetch('https://cve.circl.lu/api/last/30', { signal: AbortSignal.timeout(15000) })
+    if (!res.ok) {
+      cveFailed = true
+      cveFailedAt = Date.now()
+      return cveCache?.data?.slice(0, limit) || []
+    }
+
+    const json = await res.json()
+    const cves: CveEntry[] = (Array.isArray(json) ? json : []).map((c: any) => ({
+      id: c.id || c.cveId || '',
+      summary: c.summary || c.descriptions?.[0]?.value || '',
+      cvss: c.cvss ?? c.metrics?.cvssMetricV31?.[0]?.cvssData?.baseScore ?? null,
+      published: c.Published || c.published || '',
+      modified: c.Modified || c.lastModified || '',
+      references: (c.references || []).slice(0, 3).map((r: any) => typeof r === 'string' ? r : r.url || ''),
+    }))
+
+    cveFailed = false
+    cveCache = { data: cves, ts: Date.now() }
+    return cves.slice(0, limit)
+  } catch (err) {
+    console.warn('[Conflict] CVE fetch failed:', err)
+    cveFailed = true
+    cveFailedAt = Date.now()
+    return cveCache?.data?.slice(0, limit) || []
+  }
+}
+
+let cyberNewsCache: { data: CyberEvent[]; ts: number } | null = null
+let cyberNewsFailed = false
+let cyberNewsFailedAt = 0
+const CYBER_NEWS_CACHE_TTL = 600_000
+const CYBER_NEWS_RETRY_BACKOFF = 120_000
+
+export async function fetchCyberNews(): Promise<CyberEvent[]> {
+  if (cyberNewsCache && Date.now() - cyberNewsCache.ts < CYBER_NEWS_CACHE_TTL) {
+    return cyberNewsCache.data
+  }
+  if (cyberNewsFailed && Date.now() - cyberNewsFailedAt < CYBER_NEWS_RETRY_BACKOFF) {
+    return cyberNewsCache?.data || []
+  }
+
+  try {
+    const params = new URLSearchParams({
+      query: 'cyberattack OR ransomware OR "data breach" OR hacking OR APT OR DDoS OR "zero day"',
+      mode: 'ArtList',
+      maxrecords: '30',
+      format: 'json',
+      timespan: '3d',
+      sort: 'DateDesc',
+    })
+
+    const res = await fetch(`${SCRP_API}/gdelt?${params}`, { signal: AbortSignal.timeout(30000) })
+    if (!res.ok) {
+      cyberNewsFailed = true
+      cyberNewsFailedAt = Date.now()
+      return cyberNewsCache?.data || []
+    }
+
+    const text = await res.text()
+    if (!text.startsWith('{') && !text.startsWith('[')) {
+      cyberNewsFailed = true
+      cyberNewsFailedAt = Date.now()
+      return cyberNewsCache?.data || []
+    }
+
+    const json = JSON.parse(text)
+    const articles: CyberEvent[] = (json.articles || []).map((a: any, i: number) => {
+      const title = (a.title || '').toLowerCase()
+      let category: CyberEvent['category'] = 'cyber'
+      if (title.match(/ransomware|ransom/)) category = 'ransomware'
+      else if (title.match(/apt|nation.state|espionage|spy/)) category = 'apt'
+      else if (title.match(/ddos|denial.of.service/)) category = 'ddos'
+      else if (title.match(/breach|leak|exfiltrat/)) category = 'breach'
+      else if (title.match(/vulnerabilit|cve|zero.day|exploit|patch/)) category = 'vulnerability'
+
+      return {
+        id: `cyber-${i}-${Date.now()}`,
+        title: a.title || '',
+        url: a.url || '',
+        domain: a.domain || '',
+        category,
+        sourcecountry: a.sourcecountry || '',
+        dateadded: a.seendate || '',
+        tone: parseFloat(a.tone?.split(',')[0]) || 0,
+      }
+    })
+
+    cyberNewsFailed = false
+    cyberNewsCache = { data: articles, ts: Date.now() }
+    return articles
+  } catch (err) {
+    console.warn('[Conflict] Cyber news fetch failed:', err)
+    cyberNewsFailed = true
+    cyberNewsFailedAt = Date.now()
+    return cyberNewsCache?.data || []
+  }
+}
+
 // ── Defense sector tickers ──
 
 export const DEFENSE_TICKERS = ['RTX', 'LMT', 'NOC', 'BA', 'GD', 'HII', 'LHX', 'LDOS']
