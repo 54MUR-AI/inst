@@ -110,7 +110,10 @@ export default function App() {
     return (saved as Layouts) || DEFAULT_LAYOUTS
   })
   const [isLive, setIsLive] = useState(true)
-  const [activeTab, setActiveTab] = useState<'economy' | 'conflict'>('economy')
+  const [activeTab, setActiveTab] = useState<'economy' | 'conflict'>(() => {
+    const saved = localStorage.getItem('nsit-active-tab')
+    return saved === 'conflict' ? 'conflict' : 'economy'
+  })
   const [visibility, setVisibility] = useState<Record<string, boolean>>(loadVisibility)
   const [aiSettings, setAiSettings] = useState<AiSettings>({
     provider: localStorage.getItem('nsit-ai-provider') || 'ollama',
@@ -178,7 +181,7 @@ export default function App() {
         {/* Tab switcher */}
         <div className="flex items-center gap-0.5 bg-samurai-grey-dark/40 rounded-md p-0.5">
           <button
-            onClick={() => setActiveTab('economy')}
+            onClick={() => { setActiveTab('economy'); localStorage.setItem('nsit-active-tab', 'economy') }}
             className={`flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-mono font-bold transition-all ${
               activeTab === 'economy'
                 ? 'bg-samurai-red/20 text-samurai-red'
@@ -189,7 +192,7 @@ export default function App() {
             ECONOMY
           </button>
           <button
-            onClick={() => setActiveTab('conflict')}
+            onClick={() => { setActiveTab('conflict'); localStorage.setItem('nsit-active-tab', 'conflict') }}
             className={`flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-mono font-bold transition-all ${
               activeTab === 'conflict'
                 ? 'bg-red-600/20 text-red-500'
