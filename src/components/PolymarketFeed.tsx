@@ -96,15 +96,7 @@ export default function PolymarketFeed() {
 
         setEvents(parsed)
       } catch {
-        // Fallback data
-        setEvents([
-          { id: '1', title: 'Will Bitcoin reach $150K by end of 2026?', yesPrice: 0.42, noPrice: 0.58, volume: '$12.4M', endDate: '12/31/2026', category: 'crypto' },
-          { id: '2', title: 'Will the Fed cut rates in March 2026?', yesPrice: 0.68, noPrice: 0.32, volume: '$8.7M', endDate: '3/31/2026', category: 'politics' },
-          { id: '3', title: 'Will OpenAI release GPT-5 by June 2026?', yesPrice: 0.55, noPrice: 0.45, volume: '$3.2M', endDate: '6/30/2026', category: 'tech' },
-          { id: '4', title: 'Will Ethereum flip Bitcoin market cap?', yesPrice: 0.08, noPrice: 0.92, volume: '$5.1M', endDate: '12/31/2026', category: 'crypto' },
-          { id: '5', title: 'Will there be a US recession in 2026?', yesPrice: 0.31, noPrice: 0.69, volume: '$15.8M', endDate: '12/31/2026', category: 'politics' },
-          { id: '6', title: 'Super Bowl 2027 winner: Chiefs?', yesPrice: 0.18, noPrice: 0.82, volume: '$2.1M', endDate: '2/7/2027', category: 'sports' },
-        ])
+        // No fallback — empty state will show
       }
       setLoading(false)
     }

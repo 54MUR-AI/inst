@@ -23,7 +23,7 @@ export default function FearGreedGauge() {
           timestamp: new Date(parseInt(entry.timestamp) * 1000).toLocaleDateString(),
         })
       } catch {
-        setData({ value: 45, classification: 'Fear', timestamp: new Date().toLocaleDateString() })
+        // No fallback — null state will show
       }
     }
     fetchFearGreed()
@@ -34,7 +34,7 @@ export default function FearGreedGauge() {
   if (!data) {
     return (
       <div className="h-full flex items-center justify-center">
-        <div className="text-xs text-samurai-steel animate-pulse font-mono">Loading gauge...</div>
+        <div className="text-xs text-samurai-steel font-mono">Fear & Greed data unavailable</div>
       </div>
     )
   }

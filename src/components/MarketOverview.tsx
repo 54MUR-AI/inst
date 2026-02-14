@@ -48,14 +48,7 @@ export default function MarketOverview() {
           },
         ])
       } catch {
-        setStats([
-          { label: 'Total Market Cap', value: '$3.21T', change: 1.8 },
-          { label: '24h Volume', value: '$142.5B' },
-          { label: 'BTC Dominance', value: '57.2%' },
-          { label: 'ETH Dominance', value: '12.8%' },
-          { label: 'Active Cryptos', value: '14,231' },
-          { label: 'Markets', value: '1,104' },
-        ])
+        // No fallback — show empty state
       }
       setLoading(false)
     }
@@ -69,6 +62,14 @@ export default function MarketOverview() {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-xs text-samurai-steel animate-pulse font-mono">Loading market data...</div>
+      </div>
+    )
+  }
+
+  if (stats.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-xs text-samurai-steel font-mono">Unable to load crypto market data</div>
       </div>
     )
   }

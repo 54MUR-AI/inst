@@ -26,19 +26,7 @@ export default function CryptoHeatmap() {
         }))
         setCoins(data)
       } catch {
-        // Fallback data
-        setCoins([
-          { id: 'bitcoin', symbol: 'BTC', name: 'Bitcoin', market_cap: 1900000000000, current_price: 97234, price_change_percentage_24h: 2.1 },
-          { id: 'ethereum', symbol: 'ETH', name: 'Ethereum', market_cap: 420000000000, current_price: 3456, price_change_percentage_24h: -1.3 },
-          { id: 'solana', symbol: 'SOL', name: 'Solana', market_cap: 95000000000, current_price: 198, price_change_percentage_24h: 6.7 },
-          { id: 'ripple', symbol: 'XRP', name: 'XRP', market_cap: 130000000000, current_price: 2.34, price_change_percentage_24h: 2.2 },
-          { id: 'cardano', symbol: 'ADA', name: 'Cardano', market_cap: 32000000000, current_price: 0.89, price_change_percentage_24h: -2.1 },
-          { id: 'dogecoin', symbol: 'DOGE', name: 'Dogecoin', market_cap: 47000000000, current_price: 0.32, price_change_percentage_24h: 3.1 },
-          { id: 'avalanche', symbol: 'AVAX', name: 'Avalanche', market_cap: 16000000000, current_price: 38.9, price_change_percentage_24h: 5.7 },
-          { id: 'polkadot', symbol: 'DOT', name: 'Polkadot', market_cap: 10000000000, current_price: 7.23, price_change_percentage_24h: -2.0 },
-          { id: 'chainlink', symbol: 'LINK', name: 'Chainlink', market_cap: 12000000000, current_price: 19.5, price_change_percentage_24h: 4.2 },
-          { id: 'polygon', symbol: 'MATIC', name: 'Polygon', market_cap: 8000000000, current_price: 0.85, price_change_percentage_24h: -0.5 },
-        ])
+        // No fallback — empty state will show
       }
       setLoading(false)
     }
@@ -52,6 +40,14 @@ export default function CryptoHeatmap() {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-xs text-samurai-steel animate-pulse font-mono">Loading market data...</div>
+      </div>
+    )
+  }
+
+  if (coins.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-xs text-samurai-steel font-mono">Unable to load crypto heatmap data</div>
       </div>
     )
   }

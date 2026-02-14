@@ -70,19 +70,7 @@ export default function NewsFeed() {
     // Sort by date (newest first)
     allItems.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime())
 
-    if (allItems.length > 0) {
-      setNews(allItems)
-    } else {
-      // Fallback
-      setNews([
-        { title: 'Bitcoin surges past $100K as institutional demand grows', link: '#', pubDate: new Date().toISOString(), source: 'CoinDesk', category: 'crypto' },
-        { title: 'Fed signals potential rate cut in upcoming meeting', link: '#', pubDate: new Date(Date.now() - 3600000).toISOString(), source: 'Reuters', category: 'macro' },
-        { title: 'S&P 500 hits new all-time high amid tech rally', link: '#', pubDate: new Date(Date.now() - 7200000).toISOString(), source: 'MarketWatch', category: 'markets' },
-        { title: 'Ethereum staking yields attract institutional investors', link: '#', pubDate: new Date(Date.now() - 10800000).toISOString(), source: 'CoinTelegraph', category: 'crypto' },
-        { title: 'Global trade tensions ease as new agreements reached', link: '#', pubDate: new Date(Date.now() - 14400000).toISOString(), source: 'BBC Business', category: 'macro' },
-        { title: 'Solana DeFi TVL crosses $20B milestone', link: '#', pubDate: new Date(Date.now() - 18000000).toISOString(), source: 'CoinDesk', category: 'crypto' },
-      ])
-    }
+    setNews(allItems)
     setLoading(false)
   }, [])
 

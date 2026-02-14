@@ -28,17 +28,7 @@ export default function TickerTape() {
         }))
         setTickers(items)
       } catch {
-        // Fallback mock data
-        setTickers([
-          { symbol: 'BTC', price: '$97,234', change: 1234, changePercent: 2.1 },
-          { symbol: 'ETH', price: '$3,456', change: -45, changePercent: -1.3 },
-          { symbol: 'SOL', price: '$198.50', change: 12.5, changePercent: 6.7 },
-          { symbol: 'XRP', price: '$2.34', change: 0.05, changePercent: 2.2 },
-          { symbol: 'ADA', price: '$0.89', change: -0.02, changePercent: -2.1 },
-          { symbol: 'DOGE', price: '$0.32', change: 0.01, changePercent: 3.1 },
-          { symbol: 'AVAX', price: '$38.90', change: 2.1, changePercent: 5.7 },
-          { symbol: 'DOT', price: '$7.23', change: -0.15, changePercent: -2.0 },
-        ])
+        // No fallback — tape hides itself when empty
       }
     }
 
