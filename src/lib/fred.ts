@@ -34,7 +34,36 @@ export const FRED_SERIES = [
   { id: 'VIXCLS', label: 'VIX', unit: 'Index' },
 ] as const
 
-const FRED_BASE = API.fred('/fred')
+const FRED_PROXY = API.fred('/fred')
+const FRED_DIRECT = 'https://api.stlouisfed.org/fred'
+
+/**
+ * Fetch a FRED URL, trying the local proxy first, then a CORS proxy fallback.
+ * Render's _redirects may not proxy FRED correctly (returns HTML instead of JSON).
+ */
+async function fetchFred(path: string): Promise<Response> {
+  // Try local proxy first
+  const proxyUrl = `${FRED_PROXY}${path}`
+  try {
+    const res = await fetch(proxyUrl, { headers: { 'Accept': 'application/json' } })
+    if (res.ok) {
+      // Check if we got HTML back (Render serving index.html instead of proxying)
+      const ct = res.headers.get('content-type') || ''
+      if (ct.includes('text/html')) {
+        console.warn('[FRED] Proxy returned HTML, falling back to CORS proxy')
+      } else {
+        return res
+      }
+    }
+  } catch {
+    // proxy failed, try fallback
+  }
+
+  // Fallback: use corsproxy.io to bypass CORS
+  const directUrl = `${FRED_DIRECT}${path}`
+  const corsUrl = `https://corsproxy.io/?${encodeURIComponent(directUrl)}`
+  return fetch(corsUrl, { headers: { 'Accept': 'application/json' } })
+}
 
 let cachedKey: string | null = null
 let keyChecked = false
@@ -82,8 +111,8 @@ async function fetchSeries(
     twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2)
     const startDate = twoYearsAgo.toISOString().split('T')[0]
 
-    const url = `${FRED_BASE}/series/observations?series_id=${seriesId}&api_key=${apiKey}&file_type=json&observation_start=${startDate}&sort_order=asc`
-    const res = await fetch(url, { headers: { 'Accept': 'application/json' } })
+    const path = `/series/observations?series_id=${seriesId}&api_key=${apiKey}&file_type=json&observation_start=${startDate}&sort_order=asc`
+    const res = await fetchFred(path)
     if (!res.ok) return null
 
     const json = await res.json()
@@ -172,8 +201,8 @@ export async function fetchFredObservationNear(
     const end = new Date(targetDate + 'T00:00:00')
     end.setMonth(end.getMonth() + 1)
 
-    const url = `${FRED_BASE}/series/observations?series_id=${seriesId}&api_key=${apiKey}&file_type=json&observation_start=${start.toISOString().split('T')[0]}&observation_end=${end.toISOString().split('T')[0]}&sort_order=desc&limit=2`
-    const res = await fetch(url, { headers: { 'Accept': 'application/json' } })
+    const path = `/series/observations?series_id=${seriesId}&api_key=${apiKey}&file_type=json&observation_start=${start.toISOString().split('T')[0]}&observation_end=${end.toISOString().split('T')[0]}&sort_order=desc&limit=2`
+    const res = await fetchFred(path)
     if (!res.ok) return null
 
     const json = await res.json()
