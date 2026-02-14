@@ -30,9 +30,21 @@ async function processCgQueue() {
 
 // Shared coins/markets data — one fetch serves TickerTape, CryptoHeatmap, TopMovers, predictionEngine
 let sharedMarketsCache: { data: any[]; ts: number } | null = null
+let sharedMarketsInflight: Promise<any[]> | null = null
 const SHARED_MARKETS_TTL = 90_000
 
-export async function getSharedMarkets(): Promise<any[]> {
+export function getSharedMarkets(): Promise<any[]> {
+  if (sharedMarketsCache && Date.now() - sharedMarketsCache.ts < SHARED_MARKETS_TTL) {
+    return Promise.resolve(sharedMarketsCache.data)
+  }
+  // Deduplicate concurrent calls — all callers share one inflight request
+  if (sharedMarketsInflight) return sharedMarketsInflight
+  sharedMarketsInflight = _fetchSharedMarkets().finally(() => { sharedMarketsInflight = null })
+  return sharedMarketsInflight
+}
+
+async function _fetchSharedMarkets(): Promise<any[]> {
+  // Re-check cache (another caller may have just filled it)
   if (sharedMarketsCache && Date.now() - sharedMarketsCache.ts < SHARED_MARKETS_TTL) {
     return sharedMarketsCache.data
   }
