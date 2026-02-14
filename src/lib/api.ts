@@ -8,12 +8,12 @@ export const API = {
 }
 
 // CoinGecko rate-limiter with response cache
-// Free tier: ~10-30 req/min. We queue requests with a 4s gap and cache responses for 60s.
+// Free tier: ~10-30 req/min. We queue requests with a 6s gap and cache responses for 90s.
 const cgQueue: (() => Promise<void>)[] = []
 let cgProcessing = false
 const cgCache = new Map<string, { data: any; ts: number }>()
-const CG_CACHE_TTL = 60_000 // 60s
-const CG_GAP_MS = 4_000     // 4s between requests
+const CG_CACHE_TTL = 90_000 // 90s
+const CG_GAP_MS = 6_000     // 6s between requests
 
 async function processCgQueue() {
   if (cgProcessing) return
@@ -30,19 +30,49 @@ async function processCgQueue() {
 
 // Shared coins/markets data — one fetch serves TickerTape, CryptoHeatmap, TopMovers, predictionEngine
 let sharedMarketsCache: { data: any[]; ts: number } | null = null
-const SHARED_MARKETS_TTL = 60_000
+const SHARED_MARKETS_TTL = 90_000
 
 export async function getSharedMarkets(): Promise<any[]> {
   if (sharedMarketsCache && Date.now() - sharedMarketsCache.ts < SHARED_MARKETS_TTL) {
     return sharedMarketsCache.data
   }
-  const res = await fetchCoinGecko(
-    '/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&sparkline=false&price_change_percentage=24h%2C7d%2C30d'
-  )
-  if (!res.ok) return sharedMarketsCache?.data || []
-  const data = await res.json()
-  sharedMarketsCache = { data, ts: Date.now() }
-  return data
+  try {
+    const res = await fetchCoinGecko(
+      '/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&sparkline=false&price_change_percentage=24h%2C7d%2C30d'
+    )
+    if (res.ok) {
+      const data = await res.json()
+      if (Array.isArray(data) && data.length > 0) {
+        sharedMarketsCache = { data, ts: Date.now() }
+        return data
+      }
+    }
+    console.warn('[CoinGecko] Proxy fetch failed, status:', res.status)
+  } catch (err) {
+    console.warn('[CoinGecko] Proxy fetch error:', err)
+  }
+
+  // Fallback: try direct CoinGecko API (may hit CORS in browser but works in some environments)
+  try {
+    const directRes = await fetch(
+      'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&sparkline=false&price_change_percentage=24h%2C7d%2C30d',
+      { headers: { 'Accept': 'application/json' } }
+    )
+    if (directRes.ok) {
+      const data = await directRes.json()
+      if (Array.isArray(data) && data.length > 0) {
+        console.info('[CoinGecko] Direct API fallback succeeded')
+        sharedMarketsCache = { data, ts: Date.now() }
+        return data
+      }
+    }
+    console.warn('[CoinGecko] Direct API fallback failed, status:', directRes.status)
+  } catch (err) {
+    console.warn('[CoinGecko] Direct API fallback error:', err)
+  }
+
+  // Return stale cache if available
+  return sharedMarketsCache?.data || []
 }
 
 export function fetchCoinGecko(path: string, options?: RequestInit): Promise<Response> {
@@ -81,9 +111,11 @@ export function fetchCoinGecko(path: string, options?: RequestInit): Promise<Res
             resolve(res)
           }
         } else {
+          console.warn(`[CoinGecko] Proxy returned ${res.status} for ${path.split('?')[0]}`)
           resolve(res)
         }
       } catch (err) {
+        console.warn('[CoinGecko] Proxy network error:', err)
         reject(err)
       }
     })

@@ -35,14 +35,22 @@ export const FRED_SERIES = [
 
 const FRED_BASE = 'https://api.stlouisfed.org/fred'
 
-let cachedKey: string | null | undefined = undefined
+let cachedKey: string | null = null
+let keyChecked = false
 let cachedData: { data: FredSeriesData[]; ts: number } | null = null
 const CACHE_TTL = 600_000 // 10 minutes
 
 async function getFredKey(): Promise<string | null> {
-  if (cachedKey !== undefined) return cachedKey
-  cachedKey = await getApiKey('fred')
-  return cachedKey
+  // Only cache a successful key lookup; retry on null so auth bootstrap has time
+  if (cachedKey) return cachedKey
+  if (keyChecked && cachedKey === null) {
+    // Retry once more after a delay (auth may have bootstrapped late)
+    keyChecked = false
+  }
+  const key = await getApiKey('fred')
+  if (key) cachedKey = key
+  keyChecked = true
+  return key
 }
 
 /** Check if user has a FRED key available */
@@ -52,7 +60,8 @@ export async function hasFredKey(): Promise<boolean> {
 
 /** Clear cached key (call on auth change) */
 export function clearFredCache() {
-  cachedKey = undefined
+  cachedKey = null
+  keyChecked = false
   cachedData = null
 }
 

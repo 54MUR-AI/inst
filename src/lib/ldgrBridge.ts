@@ -71,6 +71,44 @@ export function isAuthenticated(): boolean {
   return !!auth.accessToken && !!auth.userId
 }
 
+/**
+ * Bootstrap auth from localStorage when running standalone (not embedded in RMG).
+ * Reads the Supabase session stored by the auth provider.
+ */
+export function bootstrapAuth(): boolean {
+  if (auth.accessToken && auth.userId) return true // already authenticated
+
+  const STORAGE_KEYS = [
+    'sb-meqfiyuaxgwbstcdmjgz-auth-token',
+    'supabase.auth.token',
+    'sb-auth-token',
+  ]
+
+  for (const key of STORAGE_KEYS) {
+    const raw = localStorage.getItem(key)
+    if (!raw) continue
+    try {
+      const parsed = JSON.parse(raw)
+      const token = parsed.access_token || parsed.token
+      if (token) {
+        setAuthToken(JSON.stringify({ access_token: token }))
+        if (auth.accessToken && auth.userId) return true
+      }
+    } catch {
+      // skip malformed entries
+    }
+  }
+
+  // Also check sessionStorage (set by App.tsx on RMG_AUTH_TOKEN)
+  const sessionToken = sessionStorage.getItem('nsit_auth_token')
+  if (sessionToken) {
+    setAuthToken(JSON.stringify({ access_token: sessionToken }))
+    if (auth.accessToken && auth.userId) return true
+  }
+
+  return false
+}
+
 // ── API Key fetching ──
 
 export interface LdgrApiKey {

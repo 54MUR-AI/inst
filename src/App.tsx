@@ -29,7 +29,7 @@ import ForexBonds from './components/ForexBonds'
 import SettingsPanel from './components/SettingsPanel'
 import type { AiSettings } from './components/SettingsPanel'
 import { ScanEye, Zap } from 'lucide-react'
-import { setAuthToken } from './lib/ldgrBridge'
+import { setAuthToken, bootstrapAuth } from './lib/ldgrBridge'
 import { loadSavedLayouts, saveLayouts, loadVisibility, saveVisibility } from './lib/widgetRegistry'
 
 const ResponsiveGridLayout = WidthProvider(Responsive)
@@ -117,6 +117,11 @@ export default function App() {
   })
 
   // Listen for RMG auth messages
+  // Bootstrap auth from localStorage on mount (standalone mode)
+  useEffect(() => {
+    bootstrapAuth()
+  }, [])
+
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'RMG_AUTH_TOKEN') {
