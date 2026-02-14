@@ -257,22 +257,22 @@ export default function App() {
           margin={[8, 8]}
         >
           {isVisible('global-equities') && <div key="global-equities">
-            <WidgetPanel title="Global Indices" icon="trending-up" live>
+            <WidgetPanel title="Global Indices" icon="trending-up" live pipeline="yahoo">
               <GlobalEquities />
             </WidgetPanel>
           </div>}
           {isVisible('commodities') && <div key="commodities">
-            <WidgetPanel title="Commodities & Metals" icon="gem" live>
+            <WidgetPanel title="Commodities & Metals" icon="gem" live pipeline="yahoo">
               <CommoditiesMetals />
             </WidgetPanel>
           </div>}
           {isVisible('forex-bonds') && <div key="forex-bonds">
-            <WidgetPanel title="Forex & Bonds" icon="dollar" live>
+            <WidgetPanel title="Forex & Bonds" icon="dollar" live pipeline="yahoo">
               <ForexBonds />
             </WidgetPanel>
           </div>}
           {isVisible('market-overview') && <div key="market-overview">
-            <WidgetPanel title="Crypto Overview" icon="trending-up">
+            <WidgetPanel title="Crypto Overview" icon="trending-up" pipeline="coingecko">
               <MarketOverview />
             </WidgetPanel>
           </div>}
@@ -297,7 +297,7 @@ export default function App() {
             </WidgetPanel>
           </div>}
           {isVisible('macro') && <div key="macro">
-            <WidgetPanel title="Macro Dashboard" icon="chart">
+            <WidgetPanel title="Macro Dashboard" icon="chart" pipeline="fred">
               <MacroDashboard />
             </WidgetPanel>
           </div>}
@@ -307,7 +307,7 @@ export default function App() {
             </WidgetPanel>
           </div>}
           {isVisible('top-movers') && <div key="top-movers">
-            <WidgetPanel title="Top Movers" icon="flame" live>
+            <WidgetPanel title="Top Movers" icon="flame" live pipeline="coingecko">
               <TopMovers />
             </WidgetPanel>
           </div>}
@@ -322,12 +322,12 @@ export default function App() {
             </WidgetPanel>
           </div>}
           {isVisible('crypto-heatmap') && <div key="crypto-heatmap">
-            <WidgetPanel title="Crypto Heatmap" icon="grid">
+            <WidgetPanel title="Crypto Heatmap" icon="grid" pipeline="coingecko">
               <CryptoHeatmap />
             </WidgetPanel>
           </div>}
           {isVisible('watchlist') && <div key="watchlist">
-            <WidgetPanel title="Watchlist" icon="star" live>
+            <WidgetPanel title="Watchlist" icon="star" live pipeline="yahoo">
               <Watchlist />
             </WidgetPanel>
           </div>}
@@ -337,7 +337,7 @@ export default function App() {
             </WidgetPanel>
           </div>}
           {isVisible('sector-performance') && <div key="sector-performance">
-            <WidgetPanel title="Sector Performance" icon="layers" live>
+            <WidgetPanel title="Sector Performance" icon="layers" live pipeline="yahoo">
               <SectorPerformance />
             </WidgetPanel>
           </div>}

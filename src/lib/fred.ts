@@ -7,6 +7,7 @@
 import { getApiKey } from './ldgrBridge'
 import { API } from './api'
 import { saveAiCache, loadAiCache } from './aiCache'
+import { setPipelineState } from './pipelineStatus'
 
 export interface FredObservation {
   date: string
@@ -160,7 +161,12 @@ export async function fetchFredData(
   seriesIds?: typeof FRED_SERIES[number]['id'][]
 ): Promise<FredSeriesData[] | null> {
   const apiKey = await getFredKey()
-  if (!apiKey) return null
+  if (!apiKey) {
+    setPipelineState('fred', 'error', 'No FRED API key — add one in LDGR')
+    return null
+  }
+
+  setPipelineState('fred', 'loading', undefined, true)
 
   // Check cache
   if (cachedData && Date.now() - cachedData.ts < CACHE_TTL) {
@@ -182,8 +188,11 @@ export async function fetchFredData(
 
   if (data.length > 0) {
     cachedData = { data, ts: Date.now() }
+    setPipelineState('fred', 'ok', `${data.length} series`, true)
     // Persist to Supabase for fast reload (fire-and-forget)
     saveAiCache(SUPABASE_CACHE_KEY, data).catch(() => {})
+  } else {
+    setPipelineState('fred', 'error', 'No data returned')
   }
 
   return data.length > 0 ? data : null

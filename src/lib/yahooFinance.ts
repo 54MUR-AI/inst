@@ -5,6 +5,7 @@
  */
 
 import { API } from './api'
+import { setPipelineState } from './pipelineStatus'
 
 export interface YahooQuote {
   symbol: string
@@ -80,17 +81,28 @@ export async function fetchQuotes(symbols: string[]): Promise<Map<string, YahooQ
   const toFetch = now - cache.ts >= CACHE_TTL ? symbols : symbols.filter(s => !cache.data.has(s))
 
   try {
+    setPipelineState('yahoo', 'loading')
     const results = await Promise.allSettled(toFetch.map(s => fetchSingleChart(s)))
 
+    let okCount = 0
     for (let i = 0; i < toFetch.length; i++) {
       const r = results[i]
       if (r.status === 'fulfilled' && r.value) {
         cache.data.set(toFetch[i], r.value)
+        okCount++
       }
     }
     cache.ts = now
+    if (okCount > 0) {
+      setPipelineState('yahoo', 'ok', `${cache.data.size} quotes`)
+    } else if (cache.data.size > 0) {
+      setPipelineState('yahoo', 'stale', 'Using cached data')
+    } else {
+      setPipelineState('yahoo', 'error', 'No quotes returned')
+    }
   } catch (err) {
     console.warn('[Yahoo Finance] Batch fetch failed:', err)
+    setPipelineState('yahoo', 'error', err instanceof Error ? err.message : 'Network error')
   }
 
   return cache.data

@@ -5,6 +5,7 @@
  */
 
 import { getApiKey } from './ldgrBridge'
+import { setPipelineState } from './pipelineStatus'
 
 // ── Types ──
 
@@ -121,20 +122,24 @@ async function _fetchLiveAircraftImpl(bounds?: {
 
     // Try to get OpenSky credentials from LDGR for authenticated requests (4x rate limit)
     const headers: Record<string, string> = {}
+    let usingKey = false
     try {
       const creds = await getApiKey('opensky')
       if (creds) {
-        // Key stored as 'username:password'
         headers['Authorization'] = 'Basic ' + btoa(creds)
-        console.log('[Conflict] Using authenticated OpenSky request')
+        usingKey = true
       }
     } catch { /* no key available, use anonymous */ }
 
+    setPipelineState('opensky', 'loading', undefined, usingKey)
     const res = await fetch(url, { signal: AbortSignal.timeout(10000), headers })
     if (!res.ok) {
       if (res.status === 429) {
         openskyFailed = true
         openskyFailedAt = Date.now()
+        setPipelineState('opensky', 'rate-limited', `429 — ${usingKey ? 'auth' : 'anon'} limit hit`)
+      } else {
+        setPipelineState('opensky', 'error', `HTTP ${res.status}`)
       }
       return aircraftCache?.data || []
     }
@@ -160,11 +165,11 @@ async function _fetchLiveAircraftImpl(bounds?: {
 
     openskyFailed = false
     aircraftCache = { data: aircraft, ts: Date.now() }
+    setPipelineState('opensky', 'ok', `${aircraft.length} aircraft`, usingKey)
     return aircraft
   } catch (err) {
     console.warn('[Conflict] OpenSky fetch failed:', err)
-    openskyFailed = true
-    openskyFailedAt = Date.now()
+    setPipelineState('opensky', 'error', err instanceof Error ? err.message : 'Network error')
     return aircraftCache?.data || []
   }
 }
@@ -273,7 +278,7 @@ export async function fetchConflictEvents(options?: {
 // ── NASA FIRMS — Fire / Hotspot Detection ──
 
 const FIRMS_API = 'https://firms.modaps.eosdis.nasa.gov/api/area/csv'
-const FIRMS_MAP_KEY = 'DEMO_KEY' // NASA demo key, rate limited
+const FIRMS_DEFAULT_KEY = 'DEMO_KEY' // NASA demo key, rate limited
 
 let firmsCache: { data: Hotspot[]; ts: number } | null = null
 const FIRMS_CACHE_TTL = 600_000 // 10 min
@@ -290,9 +295,21 @@ export async function fetchHotspots(options?: {
   const days = options?.dayRange || 1
 
   try {
-    const url = `${FIRMS_API}/${FIRMS_MAP_KEY}/${source}/world/${days}`
+    // Try LDGR key first, fall back to demo key
+    let firmsKey = FIRMS_DEFAULT_KEY
+    let usingKey = false
+    try {
+      const ldgrKey = await getApiKey('nasa-firms')
+      if (ldgrKey) { firmsKey = ldgrKey; usingKey = true }
+    } catch { /* use default */ }
+
+    setPipelineState('firms', 'loading', undefined, usingKey)
+    const url = `${FIRMS_API}/${firmsKey}/${source}/world/${days}`
     const res = await fetch(url, { signal: AbortSignal.timeout(20000) })
-    if (!res.ok) return firmsCache?.data || []
+    if (!res.ok) {
+      setPipelineState('firms', res.status === 429 ? 'rate-limited' : 'error', `HTTP ${res.status}`)
+      return firmsCache?.data || []
+    }
 
     const text = await res.text()
     const lines = text.trim().split('\n')
@@ -326,9 +343,11 @@ export async function fetchHotspots(options?: {
     const filtered = hotspots.filter(h => h.confidence === 'h' || h.confidence === 'high' || h.frp > 10)
 
     firmsCache = { data: filtered, ts: Date.now() }
+    setPipelineState('firms', 'ok', `${filtered.length} hotspots`, usingKey)
     return filtered
   } catch (err) {
     console.warn('[Conflict] FIRMS fetch failed:', err)
+    setPipelineState('firms', 'error', err instanceof Error ? err.message : 'Network error')
     return firmsCache?.data || []
   }
 }

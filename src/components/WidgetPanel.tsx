@@ -1,5 +1,6 @@
-import { ReactNode } from 'react'
-import { TrendingUp, Gauge, Brain, Grid3X3, GripVertical, Target, BarChart3, Newspaper, Gem, DollarSign, Crosshair, Flame, CalendarDays, CandlestickChart as CandlestickIcon, Star, Bell, Layers, Banknote, PieChart, Clock, Globe, Shield, Plane, AlertTriangle } from 'lucide-react'
+import { ReactNode, useState, useEffect } from 'react'
+import { TrendingUp, Gauge, Brain, Grid3X3, GripVertical, Target, BarChart3, Newspaper, Gem, DollarSign, Crosshair, Flame, CalendarDays, CandlestickChart as CandlestickIcon, Star, Bell, Layers, Banknote, PieChart, Clock, Globe, Shield, Plane, AlertTriangle, Ship, Cpu, Wheat, Loader2 } from 'lucide-react'
+import { getPipeline, onPipelineChange, getPipelineStatusText, type PipelineState } from '../lib/pipelineStatus'
 
 const ICONS: Record<string, ReactNode> = {
   'trending-up': <TrendingUp className="w-3.5 h-3.5" />,
@@ -25,16 +26,52 @@ const ICONS: Record<string, ReactNode> = {
   'shield': <Shield className="w-3.5 h-3.5" />,
   'plane': <Plane className="w-3.5 h-3.5" />,
   'alert-triangle': <AlertTriangle className="w-3.5 h-3.5" />,
+  'ship': <Ship className="w-3.5 h-3.5" />,
+  'cpu': <Cpu className="w-3.5 h-3.5" />,
+  'wheat': <Wheat className="w-3.5 h-3.5" />,
 }
 
 interface WidgetPanelProps {
   title: string
   icon?: string
   live?: boolean
+  pipeline?: string  // pipeline name for status indicator
   children: ReactNode
 }
 
-export default function WidgetPanel({ title, icon, live, children }: WidgetPanelProps) {
+const STATE_COLORS: Record<PipelineState, string> = {
+  idle: 'text-samurai-steel/50',
+  loading: 'text-cyan-400',
+  ok: 'text-samurai-steel/60',
+  'rate-limited': 'text-amber-400',
+  error: 'text-red-400',
+  stale: 'text-amber-400/70',
+}
+
+function PipelineIndicator({ name }: { name: string }) {
+  const [info, setInfo] = useState(() => getPipeline(name))
+
+  useEffect(() => {
+    const unsub = onPipelineChange(() => setInfo(getPipeline(name)))
+    return unsub
+  }, [name])
+
+  const text = getPipelineStatusText(name)
+  if (!text) return null
+
+  const colorClass = STATE_COLORS[info.state] || 'text-samurai-steel/50'
+
+  return (
+    <div className={`flex items-center gap-1.5 px-2 py-0.5 border-t border-samurai-grey-dark/40 text-[8px] font-mono ${colorClass}`}>
+      {info.state === 'loading' && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
+      {info.state === 'rate-limited' && <AlertTriangle className="w-2.5 h-2.5" />}
+      {info.usingLdgrKey && info.state === 'ok' && <Shield className="w-2.5 h-2.5 text-samurai-green/60" />}
+      <span className="truncate">{text}</span>
+    </div>
+  )
+}
+
+export default function WidgetPanel({ title, icon, live, pipeline, children }: WidgetPanelProps) {
   return (
     <div className="widget-panel h-full flex flex-col">
       <div className="widget-header">
@@ -53,6 +90,7 @@ export default function WidgetPanel({ title, icon, live, children }: WidgetPanel
       <div className="flex-1 overflow-auto p-3">
         {children}
       </div>
+      {pipeline && <PipelineIndicator name={pipeline} />}
     </div>
   )
 }

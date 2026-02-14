@@ -1,3 +1,6 @@
+import { getApiKey } from './ldgrBridge'
+import { setPipelineState } from './pipelineStatus'
+
 // Proxy paths work in both dev (Vite proxy) and prod (Netlify _redirects)
 export const API = {
   coingecko: (path: string) => `/api/coingecko${path}`,
@@ -16,6 +19,8 @@ const cgCache = new Map<string, { data: any; ts: number }>()
 const CG_CACHE_TTL = 180_000 // 3 min
 const CG_GAP_MS = 8_000     // 8s between requests
 let cg429Until = 0           // timestamp until which we skip requests (429 backoff)
+let cgProKey: string | null = null
+let cgKeyChecked = false
 
 async function processCgQueue() {
   if (cgProcessing) return
@@ -95,6 +100,17 @@ async function _fetchSharedMarkets(): Promise<any[]> {
   return sharedMarketsCache?.data || []
 }
 
+async function getCgProKey(): Promise<string | null> {
+  if (cgProKey) return cgProKey
+  if (cgKeyChecked) return null
+  try {
+    const key = await getApiKey('coingecko')
+    if (key) cgProKey = key
+  } catch { /* no key */ }
+  cgKeyChecked = true
+  return cgProKey
+}
+
 export function fetchCoinGecko(path: string, options?: RequestInit): Promise<Response> {
   // Normalize path for cache key (strip trailing &, sort params)
   const cacheKey = path.split('?')[0] + '?' + (path.split('?')[1] || '')
@@ -119,11 +135,26 @@ export function fetchCoinGecko(path: string, options?: RequestInit): Promise<Res
         return
       }
       try {
-        const res = await fetch(API.coingecko(path), options)
+        // Check for CoinGecko Pro key from LDGR
+        const proKey = await getCgProKey()
+        let fetchUrl: string
+        const fetchHeaders: Record<string, string> = { ...(options?.headers as Record<string, string> || {}) }
+
+        if (proKey) {
+          // Pro API: different domain, key in header
+          fetchUrl = `https://pro-api.coingecko.com${path}`
+          fetchHeaders['x-cg-pro-api-key'] = proKey
+        } else {
+          fetchUrl = API.coingecko(path)
+        }
+
+        setPipelineState('coingecko', 'loading', undefined, !!proKey)
+        const res = await fetch(fetchUrl, { ...options, headers: fetchHeaders })
         if (res.ok) {
           try {
             const data = await res.json()
             cgCache.set(cacheKey, { data, ts: Date.now() })
+            setPipelineState('coingecko', 'ok', undefined, !!proKey)
             resolve(new Response(JSON.stringify(data), {
               status: 200, headers: { 'Content-Type': 'application/json' },
             }))
@@ -133,8 +164,11 @@ export function fetchCoinGecko(path: string, options?: RequestInit): Promise<Res
         } else {
           if (res.status === 429) {
             cg429Until = Date.now() + 60_000 // back off 60s
+            setPipelineState('coingecko', 'rate-limited', `429 — ${proKey ? 'Pro' : 'free'} limit hit`)
+          } else {
+            setPipelineState('coingecko', 'error', `HTTP ${res.status}`)
           }
-          console.warn(`[CoinGecko] Proxy returned ${res.status} for ${path.split('?')[0]}`)
+          console.warn(`[CoinGecko] ${proKey ? 'Pro' : 'Proxy'} returned ${res.status} for ${path.split('?')[0]}`)
           // Return cached data on error if available
           const stale = cgCache.get(cacheKey)
           if (stale) {
@@ -146,7 +180,8 @@ export function fetchCoinGecko(path: string, options?: RequestInit): Promise<Res
           }
         }
       } catch (err) {
-        console.warn('[CoinGecko] Proxy network error:', err)
+        console.warn('[CoinGecko] Network error:', err)
+        setPipelineState('coingecko', 'error', 'Network error')
         reject(err)
       }
     })

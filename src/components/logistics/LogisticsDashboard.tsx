@@ -90,22 +90,22 @@ export default function LogisticsDashboard() {
           </WidgetPanel>
         </div>
         <div key="supply-chain-news">
-          <WidgetPanel title="Supply Chain Intel" icon="newspaper" live>
+          <WidgetPanel title="Supply Chain Intel" icon="newspaper" live pipeline="gdelt">
             <SupplyChainNewsFeed />
           </WidgetPanel>
         </div>
         <div key="shipping-stocks">
-          <WidgetPanel title="Shipping & Logistics" icon="ship" live>
+          <WidgetPanel title="Shipping & Logistics" icon="ship" live pipeline="yahoo">
             <ShippingStocks />
           </WidgetPanel>
         </div>
         <div key="semiconductor-tracker">
-          <WidgetPanel title="Semiconductor Supply" icon="cpu" live>
+          <WidgetPanel title="Semiconductor Supply" icon="cpu" live pipeline="yahoo">
             <SemiconductorTracker />
           </WidgetPanel>
         </div>
         <div key="food-energy">
-          <WidgetPanel title="Food & Energy Security" icon="wheat" live>
+          <WidgetPanel title="Food & Energy Security" icon="wheat" live pipeline="yahoo">
             <FoodEnergyIndex />
           </WidgetPanel>
         </div>

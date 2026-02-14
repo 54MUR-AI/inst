@@ -167,27 +167,27 @@ export default function ConflictDashboard() {
           </WidgetPanel>
         </div>
         <div key="aircraft-tracker">
-          <WidgetPanel title="Aircraft Tracker" icon="plane" live>
+          <WidgetPanel title="Aircraft Tracker" icon="plane" live pipeline="opensky">
             <AircraftTracker />
           </WidgetPanel>
         </div>
         <div key="conflict-events">
-          <WidgetPanel title="Conflict Events" icon="crosshair" live>
+          <WidgetPanel title="Conflict Events" icon="crosshair" live pipeline="gdelt">
             <ConflictEventsFeed />
           </WidgetPanel>
         </div>
         <div key="conflict-news">
-          <WidgetPanel title="Conflict Intel" icon="newspaper" live>
+          <WidgetPanel title="Conflict Intel" icon="newspaper" live pipeline="gdelt">
             <ConflictNewsFeed />
           </WidgetPanel>
         </div>
         <div key="hotspot-detection">
-          <WidgetPanel title="Hotspot Detection" icon="flame" live>
+          <WidgetPanel title="Hotspot Detection" icon="flame" live pipeline="firms">
             <HotspotDetection />
           </WidgetPanel>
         </div>
         <div key="defense-stocks">
-          <WidgetPanel title="Defense Sector" icon="shield" live>
+          <WidgetPanel title="Defense Sector" icon="shield" live pipeline="yahoo">
             <DefenseStocks />
           </WidgetPanel>
         </div>
@@ -197,7 +197,7 @@ export default function ConflictDashboard() {
           </WidgetPanel>
         </div>
         <div key="cyber-threats">
-          <WidgetPanel title="Cyber Threats" icon="shield" live>
+          <WidgetPanel title="Cyber Threats" icon="shield" live pipeline="cve">
             <CyberThreatFeed />
           </WidgetPanel>
         </div>
