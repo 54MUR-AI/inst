@@ -29,7 +29,8 @@ import ForexBonds from './components/ForexBonds'
 import SettingsPanel from './components/SettingsPanel'
 import type { AiSettings } from './components/SettingsPanel'
 import ConflictDashboard from './components/conflict/ConflictDashboard'
-import { ScanEye, Zap, TrendingUp, Crosshair } from 'lucide-react'
+import LogisticsDashboard from './components/logistics/LogisticsDashboard'
+import { ScanEye, Zap, TrendingUp, Crosshair, Truck } from 'lucide-react'
 import { setAuthToken, bootstrapAuth } from './lib/ldgrBridge'
 import { loadSavedLayouts, saveLayouts, loadVisibility, saveVisibility } from './lib/widgetRegistry'
 
@@ -110,9 +111,10 @@ export default function App() {
     return (saved as Layouts) || DEFAULT_LAYOUTS
   })
   const [isLive, setIsLive] = useState(true)
-  const [activeTab, setActiveTab] = useState<'economy' | 'conflict'>(() => {
+  const [activeTab, setActiveTab] = useState<'economy' | 'conflict' | 'logistics'>(() => {
     const saved = localStorage.getItem('nsit-active-tab')
-    return saved === 'conflict' ? 'conflict' : 'economy'
+    if (saved === 'conflict' || saved === 'logistics') return saved
+    return 'economy'
   })
   const [visibility, setVisibility] = useState<Record<string, boolean>>(loadVisibility)
   const [aiSettings, setAiSettings] = useState<AiSettings>({
@@ -202,6 +204,17 @@ export default function App() {
             <Crosshair className="w-3 h-3" />
             CONFLICT
           </button>
+          <button
+            onClick={() => { setActiveTab('logistics'); localStorage.setItem('nsit-active-tab', 'logistics') }}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-mono font-bold transition-all ${
+              activeTab === 'logistics'
+                ? 'bg-cyan-600/20 text-cyan-400'
+                : 'text-samurai-steel hover:text-white'
+            }`}
+          >
+            <Truck className="w-3 h-3" />
+            LOGISTICS
+          </button>
         </div>
 
         <div className="flex-1" />
@@ -228,6 +241,8 @@ export default function App() {
       {/* Main Content */}
       {activeTab === 'conflict' ? (
         <ConflictDashboard />
+      ) : activeTab === 'logistics' ? (
+        <LogisticsDashboard />
       ) : (
       <main className="flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4">
         <ResponsiveGridLayout
