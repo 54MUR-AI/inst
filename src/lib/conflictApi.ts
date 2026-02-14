@@ -137,8 +137,9 @@ export async function fetchMilitaryAircraft(): Promise<Aircraft[]> {
 }
 
 // ── ACLED — Conflict Events ──
-// ACLED moved their API from api.acleddata.com to acleddata.com/api in 2025
-const ACLED_API = 'https://acleddata.com/api/acled/read'
+// ACLED blocks browser CORS — route through scrp-api proxy
+const SCRP_API = 'https://scrp-api.onrender.com'
+const ACLED_API = `${SCRP_API}/acled`
 
 let acledCache: { data: ConflictEvent[]; ts: number } | null = null
 let acledFailed = false
@@ -285,7 +286,8 @@ export async function fetchHotspots(options?: {
 
 // ── GDELT — Global Tension & Conflict News ──
 
-const GDELT_DOC_API = 'https://api.gdeltproject.org/api/v2/doc/doc'
+// GDELT sometimes returns non-JSON from browser — route through scrp-api proxy
+const GDELT_DOC_API = `${SCRP_API}/gdelt`
 
 let gdeltNewsCache: { data: GdeltEvent[]; ts: number } | null = null
 let gdeltFailed = false
