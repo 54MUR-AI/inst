@@ -4,7 +4,7 @@
  * Authenticated users get 4x rate limit (4000 req/day vs 400).
  */
 
-import { getApiKey } from './ldgrBridge'
+import { getApiKeyWithName } from './ldgrBridge'
 import { setPipelineState } from './pipelineStatus'
 
 // ── Types ──
@@ -121,12 +121,13 @@ async function _fetchLiveAircraftImpl(bounds?: {
     }
 
     // Try to get OpenSky credentials from LDGR for authenticated requests (4x rate limit)
+    // Key Name = username (clientId), API Key = password
     const headers: Record<string, string> = {}
     let usingKey = false
     try {
-      const creds = await getApiKey('opensky')
+      const creds = await getApiKeyWithName('opensky')
       if (creds) {
-        headers['Authorization'] = 'Basic ' + btoa(creds)
+        headers['Authorization'] = 'Basic ' + btoa(`${creds.keyName}:${creds.key}`)
         usingKey = true
       }
     } catch { /* no key available, use anonymous */ }
@@ -299,8 +300,8 @@ export async function fetchHotspots(options?: {
     let firmsKey = FIRMS_DEFAULT_KEY
     let usingKey = false
     try {
-      const ldgrKey = await getApiKey('nasa-firms')
-      if (ldgrKey) { firmsKey = ldgrKey; usingKey = true }
+      const ldgrResult = await getApiKeyWithName('nasa-firms')
+      if (ldgrResult) { firmsKey = ldgrResult.key; usingKey = true }
     } catch { /* use default */ }
 
     setPipelineState('firms', 'loading', undefined, usingKey)

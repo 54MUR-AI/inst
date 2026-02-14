@@ -26,7 +26,21 @@ export interface YahooQuote {
 let cache: { data: Map<string, YahooQuote>; ts: number } = { data: new Map(), ts: 0 }
 const CACHE_TTL = 300_000 // 5 min (client-side simulation fills the gap)
 
+// Per-symbol inflight deduplication — prevents fetching the same symbol twice concurrently
+const inflightSymbols = new Map<string, Promise<YahooQuote | null>>()
+
 async function fetchSingleChart(symbol: string): Promise<YahooQuote | null> {
+  // Deduplicate: if this symbol is already being fetched, share the promise
+  const existing = inflightSymbols.get(symbol)
+  if (existing) return existing
+
+  const promise = _fetchSingleChartImpl(symbol)
+  inflightSymbols.set(symbol, promise)
+  promise.finally(() => inflightSymbols.delete(symbol))
+  return promise
+}
+
+async function _fetchSingleChartImpl(symbol: string): Promise<YahooQuote | null> {
   try {
     const url = API.yahoo(`/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`)
     const res = await fetch(url)
@@ -69,30 +83,41 @@ async function fetchSingleChart(symbol: string): Promise<YahooQuote | null> {
   }
 }
 
-export async function fetchQuotes(symbols: string[]): Promise<Map<string, YahooQuote>> {
-  const now = Date.now()
+// Batch consolidation: when multiple widgets call fetchQuotes within 50ms,
+// collect all requested symbols into one batch to avoid redundant fetches.
+let batchTimer: ReturnType<typeof setTimeout> | null = null
+let batchSymbols = new Set<string>()
+let batchResolvers: Array<() => void> = []
+const BATCH_WINDOW_MS = 50 // collect calls for 50ms before firing
 
-  // Return cache if fresh and has all requested symbols
-  if (now - cache.ts < CACHE_TTL && symbols.every(s => cache.data.has(s))) {
-    return cache.data
-  }
+function scheduleBatch() {
+  if (batchTimer) return // already scheduled
+  batchTimer = setTimeout(async () => {
+    const symbols = [...batchSymbols]
+    const resolvers = [...batchResolvers]
+    batchSymbols = new Set()
+    batchResolvers = []
+    batchTimer = null
 
-  // Only fetch symbols not in cache (or all if cache expired)
-  const toFetch = now - cache.ts >= CACHE_TTL ? symbols : symbols.filter(s => !cache.data.has(s))
+    await _executeBatch(symbols)
+    resolvers.forEach(r => r())
+  }, BATCH_WINDOW_MS)
+}
 
+async function _executeBatch(symbols: string[]): Promise<void> {
   try {
     setPipelineState('yahoo', 'loading')
-    const results = await Promise.allSettled(toFetch.map(s => fetchSingleChart(s)))
+    const results = await Promise.allSettled(symbols.map(s => fetchSingleChart(s)))
 
     let okCount = 0
-    for (let i = 0; i < toFetch.length; i++) {
+    for (let i = 0; i < symbols.length; i++) {
       const r = results[i]
       if (r.status === 'fulfilled' && r.value) {
-        cache.data.set(toFetch[i], r.value)
+        cache.data.set(symbols[i], r.value)
         okCount++
       }
     }
-    cache.ts = now
+    cache.ts = Date.now()
     if (okCount > 0) {
       setPipelineState('yahoo', 'ok', `${cache.data.size} quotes`)
     } else if (cache.data.size > 0) {
@@ -103,6 +128,27 @@ export async function fetchQuotes(symbols: string[]): Promise<Map<string, YahooQ
   } catch (err) {
     console.warn('[Yahoo Finance] Batch fetch failed:', err)
     setPipelineState('yahoo', 'error', err instanceof Error ? err.message : 'Network error')
+  }
+}
+
+export async function fetchQuotes(symbols: string[]): Promise<Map<string, YahooQuote>> {
+  const now = Date.now()
+
+  // Return cache if fresh and has all requested symbols
+  if (now - cache.ts < CACHE_TTL && symbols.every(s => cache.data.has(s))) {
+    return cache.data
+  }
+
+  // Determine which symbols actually need fetching
+  const toFetch = now - cache.ts >= CACHE_TTL ? symbols : symbols.filter(s => !cache.data.has(s))
+
+  if (toFetch.length > 0) {
+    // Add to batch and wait for consolidated fetch
+    toFetch.forEach(s => batchSymbols.add(s))
+    await new Promise<void>(resolve => {
+      batchResolvers.push(resolve)
+      scheduleBatch()
+    })
   }
 
   return cache.data

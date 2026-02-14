@@ -119,14 +119,25 @@ export interface LdgrApiKey {
   is_active: boolean
 }
 
-// In-memory cache: service_name → decrypted key
-const keyCache = new Map<string, string>()
+// In-memory cache: service_name → { key, keyName }
+const keyCache = new Map<string, { key: string; keyName: string }>()
 
 /**
  * Get a decrypted API key for a given service.
  * Returns null if not authenticated or no key found.
  */
 export async function getApiKey(serviceName: string): Promise<string | null> {
+  const result = await getApiKeyWithName(serviceName)
+  return result?.key ?? null
+}
+
+/**
+ * Get a decrypted API key AND its key_name for a given service.
+ * key_name serves as the clientId/username for APIs that require one
+ * (e.g. OpenSky username, RapidAPI app name).
+ * Returns null if not authenticated or no key found.
+ */
+export async function getApiKeyWithName(serviceName: string): Promise<{ key: string; keyName: string } | null> {
   if (!auth.accessToken || !auth.userId) return null
 
   // Check cache first
@@ -149,7 +160,8 @@ export async function getApiKey(serviceName: string): Promise<string | null> {
 
     // Decrypt
     const decrypted = await decryptText(data.encrypted_key, auth.userId, 'apikeys')
-    keyCache.set(serviceName, decrypted)
+    const entry = { key: decrypted, keyName: data.key_name }
+    keyCache.set(serviceName, entry)
 
     // Update last_used_at
     await supabase
@@ -157,7 +169,7 @@ export async function getApiKey(serviceName: string): Promise<string | null> {
       .update({ last_used_at: new Date().toISOString() })
       .eq('id', data.id)
 
-    return decrypted
+    return entry
   } catch (err) {
     console.warn(`[LDGR Bridge] Failed to get key for ${serviceName}:`, err)
     return null
