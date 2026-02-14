@@ -88,21 +88,28 @@ function isMilitaryIcao(icao24: string): boolean {
 let aircraftCache: { data: Aircraft[]; ts: number } | null = null
 let openskyFailed = false
 let openskyFailedAt = 0
+let openskyInflight: Promise<Aircraft[]> | null = null
 const AIRCRAFT_CACHE_TTL = 60_000 // 1 min (OpenSky rate-limits aggressively)
 const OPENSKY_RETRY_BACKOFF = 120_000 // 2 min after 429
 
-export async function fetchLiveAircraft(bounds?: {
+export function fetchLiveAircraft(bounds?: {
   lamin: number; lomin: number; lamax: number; lomax: number
 }): Promise<Aircraft[]> {
   if (aircraftCache && Date.now() - aircraftCache.ts < AIRCRAFT_CACHE_TTL) {
-    return aircraftCache.data
+    return Promise.resolve(aircraftCache.data)
   }
-
-  // Don't retry too soon after rate limit
   if (openskyFailed && Date.now() - openskyFailedAt < OPENSKY_RETRY_BACKOFF) {
-    return aircraftCache?.data || []
+    return Promise.resolve(aircraftCache?.data || [])
   }
+  // Deduplicate concurrent calls
+  if (openskyInflight) return openskyInflight
+  openskyInflight = _fetchLiveAircraftImpl(bounds).finally(() => { openskyInflight = null })
+  return openskyInflight
+}
 
+async function _fetchLiveAircraftImpl(bounds?: {
+  lamin: number; lomin: number; lamax: number; lomax: number
+}): Promise<Aircraft[]> {
   try {
     let url = `${OPENSKY_API}/states/all`
     if (bounds) {
@@ -122,7 +129,7 @@ export async function fetchLiveAircraft(bounds?: {
     const states: any[][] = json.states || []
 
     const aircraft: Aircraft[] = states
-      .filter(s => s[5] != null && s[6] != null) // must have position
+      .filter(s => s[5] != null && s[6] != null)
       .map(s => ({
         icao24: s[0],
         callsign: (s[1] || '').trim(),

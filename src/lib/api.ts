@@ -13,13 +13,20 @@ export const API = {
 const cgQueue: (() => Promise<void>)[] = []
 let cgProcessing = false
 const cgCache = new Map<string, { data: any; ts: number }>()
-const CG_CACHE_TTL = 90_000 // 90s
-const CG_GAP_MS = 6_000     // 6s between requests
+const CG_CACHE_TTL = 180_000 // 3 min
+const CG_GAP_MS = 8_000     // 8s between requests
+let cg429Until = 0           // timestamp until which we skip requests (429 backoff)
 
 async function processCgQueue() {
   if (cgProcessing) return
   cgProcessing = true
   while (cgQueue.length > 0) {
+    // If rate-limited, wait until backoff expires
+    if (cg429Until > Date.now()) {
+      const wait = cg429Until - Date.now()
+      console.warn(`[CoinGecko] Rate limited, waiting ${Math.round(wait/1000)}s`)
+      await new Promise(r => setTimeout(r, wait))
+    }
     const next = cgQueue.shift()
     if (next) {
       await next()
@@ -124,8 +131,19 @@ export function fetchCoinGecko(path: string, options?: RequestInit): Promise<Res
             resolve(res)
           }
         } else {
+          if (res.status === 429) {
+            cg429Until = Date.now() + 60_000 // back off 60s
+          }
           console.warn(`[CoinGecko] Proxy returned ${res.status} for ${path.split('?')[0]}`)
-          resolve(res)
+          // Return cached data on error if available
+          const stale = cgCache.get(cacheKey)
+          if (stale) {
+            resolve(new Response(JSON.stringify(stale.data), {
+              status: 200, headers: { 'Content-Type': 'application/json' },
+            }))
+          } else {
+            resolve(res)
+          }
         }
       } catch (err) {
         console.warn('[CoinGecko] Proxy network error:', err)
