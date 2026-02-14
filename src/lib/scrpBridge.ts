@@ -4,7 +4,7 @@
  * Used by AI Briefing for deeper article analysis.
  */
 
-const SCRP_API = 'https://scraper-api-89eg.onrender.com'
+const SCRP_API = 'https://scrp-api.onrender.com'
 
 export interface ScrapeResult {
   success: boolean
