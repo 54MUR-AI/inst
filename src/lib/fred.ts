@@ -35,45 +35,35 @@ export const FRED_SERIES = [
 ] as const
 
 const FRED_PROXY = API.fred('/fred')
-const FRED_DIRECT = 'https://api.stlouisfed.org/fred'
+const SCRP_API_FRED = 'https://scrp-api.onrender.com/fred'
 
 /**
- * Fetch a FRED URL, trying the local proxy first, then a CORS proxy fallback.
- * Render's _redirects may not proxy FRED correctly (returns HTML instead of JSON).
+ * Fetch a FRED URL, trying multiple proxy strategies:
+ * 1. scrp-api backend (server-side proxy, no CORS)
+ * 2. Render _redirects proxy (may return HTML)
+ * 3. Direct FRED API (works in dev via Vite proxy)
  */
 async function fetchFred(path: string): Promise<Response> {
-  // Try local proxy first
-  const proxyUrl = `${FRED_PROXY}${path}`
+  // 1. Try scrp-api backend proxy (most reliable — server-side fetch)
   try {
-    const res = await fetch(proxyUrl, { headers: { 'Accept': 'application/json' } })
-    if (res.ok) {
-      // Check if we got HTML back (Render serving index.html instead of proxying)
-      const ct = res.headers.get('content-type') || ''
-      if (ct.includes('text/html')) {
-        console.warn('[FRED] Proxy returned HTML, falling back to CORS proxy')
-      } else {
-        return res
-      }
-    }
-  } catch {
-    // proxy failed, try fallback
+    const res = await fetch(`${SCRP_API_FRED}${path}`, { headers: { 'Accept': 'application/json' } })
+    if (res.ok) return res
+    console.warn('[FRED] scrp-api proxy returned', res.status)
+  } catch (err) {
+    console.warn('[FRED] scrp-api proxy failed:', err)
   }
 
-  // Fallback: try multiple CORS proxies
-  const directUrl = `${FRED_DIRECT}${path}`
-  const proxies = [
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`,
-    `https://corsproxy.io/?${encodeURIComponent(directUrl)}`,
-  ]
-  for (const corsUrl of proxies) {
-    try {
-      const res = await fetch(corsUrl, { headers: { 'Accept': 'application/json' } })
-      if (res.ok) return res
-      console.warn(`[FRED] CORS proxy returned ${res.status}: ${corsUrl.split('?')[0]}`)
-    } catch (err) {
-      console.warn(`[FRED] CORS proxy failed: ${corsUrl.split('?')[0]}`, err)
+  // 2. Try local Render _redirects proxy
+  try {
+    const res = await fetch(`${FRED_PROXY}${path}`, { headers: { 'Accept': 'application/json' } })
+    if (res.ok) {
+      const ct = res.headers.get('content-type') || ''
+      if (!ct.includes('text/html')) return res
     }
+  } catch {
+    // proxy failed
   }
+
   // All proxies failed
   return new Response(null, { status: 502, statusText: 'All FRED proxies failed' })
 }
