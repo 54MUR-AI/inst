@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { ShieldAlert, RefreshCw, Brain } from 'lucide-react'
 import { fetchConflictEvents, fetchConflictNews } from '../../lib/conflictApi'
 import { saveAiCache, loadAiCache } from '../../lib/aiCache'
+import ollamaProxy from '../../lib/ollamaProxy'
 
 interface ThreatBriefing {
   summary: string
@@ -79,25 +80,16 @@ export default function ThreatAssessment() {
 
       const prompt = buildPrompt(events.length, fatalityCount, topCountries, headlines)
 
-      // Try Ollama via chrome extension bridge
+      // Use Ollama via RMG Bridge extension (works in iframe context)
       const aiModel = localStorage.getItem('nsit-ai-model') || 'llama3.2'
-      const aiProvider = localStorage.getItem('nsit-ai-provider') || 'ollama'
 
       let responseText = ''
 
-      if (aiProvider === 'ollama') {
-        // Use Ollama bridge
-        const res = await fetch('http://localhost:11434/api/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: aiModel, prompt, stream: false }),
-          signal: AbortSignal.timeout(30000),
-        })
-        if (!res.ok) throw new Error('Ollama not available')
-        const json = await res.json()
-        responseText = json.response || ''
+      if (ollamaProxy.isAvailable) {
+        const result = await ollamaProxy.generate(aiModel, prompt) as any
+        responseText = result?.response || ''
       } else {
-        throw new Error('Only Ollama supported for threat assessment')
+        throw new Error('Ollama bridge not available — install RMG extension')
       }
 
       // Parse JSON from response

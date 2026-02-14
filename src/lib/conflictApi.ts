@@ -137,17 +137,21 @@ export async function fetchMilitaryAircraft(): Promise<Aircraft[]> {
 }
 
 // ── ACLED — Conflict Events ──
-
-const ACLED_API = 'https://api.acleddata.com/acled/read'
+// ACLED moved their API from api.acleddata.com to acleddata.com/api in 2025
+const ACLED_API = 'https://acleddata.com/api/acled/read'
 
 let acledCache: { data: ConflictEvent[]; ts: number } | null = null
-const ACLED_CACHE_TTL = 300_000 // 5 min
+let acledFailed = false
+let acledFailedAt = 0
+const ACLED_CACHE_TTL = 600_000 // 10 min
+const ACLED_RETRY_BACKOFF = 120_000 // 2 min after failure before retrying
 
 export async function fetchConflictEvents(options?: {
   country?: string
   limit?: number
   eventType?: string
 }): Promise<ConflictEvent[]> {
+  // Return cache if fresh
   if (acledCache && Date.now() - acledCache.ts < ACLED_CACHE_TTL) {
     let data = acledCache.data
     if (options?.country) data = data.filter(e => e.country.toLowerCase().includes(options.country!.toLowerCase()))
@@ -155,10 +159,13 @@ export async function fetchConflictEvents(options?: {
     return data.slice(0, options?.limit || 100)
   }
 
+  // Don't retry too soon after a failure
+  if (acledFailed && Date.now() - acledFailedAt < ACLED_RETRY_BACKOFF) {
+    return acledCache?.data || []
+  }
+
   try {
     const params = new URLSearchParams({
-      key: 'demo', // ACLED demo key
-      email: 'demo@acleddata.com',
       limit: '500',
       order: 'desc',
     })
@@ -169,9 +176,22 @@ export async function fetchConflictEvents(options?: {
     params.set('event_date_where', '>=')
 
     const res = await fetch(`${ACLED_API}?${params}`, { signal: AbortSignal.timeout(15000) })
-    if (!res.ok) return acledCache?.data || []
+    if (!res.ok) {
+      acledFailed = true
+      acledFailedAt = Date.now()
+      return acledCache?.data || []
+    }
 
-    const json = await res.json()
+    const text = await res.text()
+    // Guard against non-JSON responses
+    if (!text.startsWith('{') && !text.startsWith('[')) {
+      console.warn('[Conflict] ACLED returned non-JSON response')
+      acledFailed = true
+      acledFailedAt = Date.now()
+      return acledCache?.data || []
+    }
+
+    const json = JSON.parse(text)
     const events: ConflictEvent[] = (json.data || []).map((e: any) => ({
       id: e.data_id || e.event_id_cnty,
       eventDate: e.event_date,
@@ -189,10 +209,13 @@ export async function fetchConflictEvents(options?: {
       source: e.source || '',
     }))
 
+    acledFailed = false
     acledCache = { data: events, ts: Date.now() }
     return events.slice(0, options?.limit || 100)
   } catch (err) {
     console.warn('[Conflict] ACLED fetch failed:', err)
+    acledFailed = true
+    acledFailedAt = Date.now()
     return acledCache?.data || []
   }
 }
@@ -265,28 +288,50 @@ export async function fetchHotspots(options?: {
 const GDELT_DOC_API = 'https://api.gdeltproject.org/api/v2/doc/doc'
 
 let gdeltNewsCache: { data: GdeltEvent[]; ts: number } | null = null
-const GDELT_CACHE_TTL = 300_000 // 5 min
+let gdeltFailed = false
+let gdeltFailedAt = 0
+const GDELT_CACHE_TTL = 600_000 // 10 min
+const GDELT_RETRY_BACKOFF = 120_000 // 2 min after failure
 
 export async function fetchConflictNews(query?: string): Promise<GdeltEvent[]> {
   if (gdeltNewsCache && Date.now() - gdeltNewsCache.ts < GDELT_CACHE_TTL) {
     return gdeltNewsCache.data
   }
 
+  // Don't retry too soon after a failure
+  if (gdeltFailed && Date.now() - gdeltFailedAt < GDELT_RETRY_BACKOFF) {
+    return gdeltNewsCache?.data || []
+  }
+
   try {
-    const q = query || 'military OR conflict OR war OR attack OR missile OR troops'
+    // Use a simpler query to avoid GDELT rate limits / query complexity errors
+    const q = query || 'conflict war military'
     const params = new URLSearchParams({
       query: q,
       mode: 'ArtList',
-      maxrecords: '50',
+      maxrecords: '30',
       format: 'json',
       timespan: '24h',
       sort: 'DateDesc',
     })
 
     const res = await fetch(`${GDELT_DOC_API}?${params}`, { signal: AbortSignal.timeout(10000) })
-    if (!res.ok) return gdeltNewsCache?.data || []
+    if (!res.ok) {
+      gdeltFailed = true
+      gdeltFailedAt = Date.now()
+      return gdeltNewsCache?.data || []
+    }
 
-    const json = await res.json()
+    // GDELT sometimes returns non-JSON error pages ("Queries co...")
+    const text = await res.text()
+    if (!text.startsWith('{') && !text.startsWith('[')) {
+      console.warn('[Conflict] GDELT returned non-JSON:', text.slice(0, 80))
+      gdeltFailed = true
+      gdeltFailedAt = Date.now()
+      return gdeltNewsCache?.data || []
+    }
+
+    const json = JSON.parse(text)
     const articles: GdeltEvent[] = (json.articles || []).map((a: any) => ({
       title: a.title || '',
       url: a.url || '',
@@ -298,10 +343,13 @@ export async function fetchConflictNews(query?: string): Promise<GdeltEvent[]> {
       image: a.socialimage || undefined,
     }))
 
+    gdeltFailed = false
     gdeltNewsCache = { data: articles, ts: Date.now() }
     return articles
   } catch (err) {
     console.warn('[Conflict] GDELT fetch failed:', err)
+    gdeltFailed = true
+    gdeltFailedAt = Date.now()
     return gdeltNewsCache?.data || []
   }
 }
