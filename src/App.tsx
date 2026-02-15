@@ -230,21 +230,20 @@ export default function App() {
         </button>
       </header>
 
-      {/* Ticker Tapes — Economy tab only */}
-      {activeTab === 'economy' && (
-        <>
-          <StockTickerTape />
-          <TickerTape />
-        </>
-      )}
+      {/* Ticker Tapes — Economy tab only (hidden, not unmounted) */}
+      <div style={{ display: activeTab === 'economy' ? undefined : 'none' }}>
+        <StockTickerTape />
+        <TickerTape />
+      </div>
 
-      {/* Main Content */}
-      {activeTab === 'conflict' ? (
+      {/* All tabs rendered simultaneously, hidden via CSS to preserve state */}
+      <div style={{ display: activeTab === 'conflict' ? 'contents' : 'none' }}>
         <ConflictDashboard />
-      ) : activeTab === 'logistics' ? (
+      </div>
+      <div style={{ display: activeTab === 'logistics' ? 'contents' : 'none' }}>
         <LogisticsDashboard />
-      ) : (
-      <main className="flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4">
+      </div>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4" style={{ display: activeTab === 'economy' ? undefined : 'none' }}>
         <ResponsiveGridLayout
           className="layout"
           layouts={filteredLayouts}
@@ -357,8 +356,7 @@ export default function App() {
             </WidgetPanel>
           </div>}
         </ResponsiveGridLayout>
-      </main>
-      )}
+      </div>
 
       {/* Settings Panel (toggled via RMG footer button) */}
       <SettingsPanel

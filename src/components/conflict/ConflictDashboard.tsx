@@ -98,27 +98,36 @@ export default function ConflictDashboard() {
   const [activeTrack, setActiveTrack] = useState<AircraftTrack | null>(null)
   const [mapLayers, setMapLayers] = useState({ aircraft: true, events: true, hotspots: true, cyber: true, vessels: true })
 
-  // Fetch data for the map
-  const refreshMapData = useCallback(async () => {
-    const [ac, ev, hs, cy, vs] = await Promise.allSettled([
+  // Fetch data for the map — staggered to avoid overwhelming network on mount
+  const refreshCritical = useCallback(async () => {
+    const [ac, ev] = await Promise.allSettled([
       fetchMilitaryAircraft(),
       fetchConflictEvents({ limit: 200 }),
+    ])
+    if (ac.status === 'fulfilled') setAircraft(ac.value)
+    if (ev.status === 'fulfilled') setEvents(ev.value)
+  }, [])
+
+  const refreshSecondary = useCallback(async () => {
+    const [hs, cy, vs] = await Promise.allSettled([
       fetchHotspots(),
       fetchCyberNews(),
       fetchVessels(),
     ])
-    if (ac.status === 'fulfilled') setAircraft(ac.value)
-    if (ev.status === 'fulfilled') setEvents(ev.value)
     if (hs.status === 'fulfilled') setHotspots(hs.value)
     if (cy.status === 'fulfilled') setCyberEvents(cy.value)
     if (vs.status === 'fulfilled') setVessels(vs.value)
   }, [])
 
   useEffect(() => {
-    refreshMapData()
-    const iv = setInterval(refreshMapData, 120_000) // 2 min — caches handle freshness
-    return () => clearInterval(iv)
-  }, [refreshMapData])
+    // Critical data first (aircraft + events)
+    refreshCritical()
+    // Defer heavier fetches by 2s (hotspots, cyber, vessels)
+    const deferTimer = setTimeout(refreshSecondary, 2000)
+    // Refresh all on interval — caches handle freshness
+    const iv = setInterval(() => { refreshCritical(); refreshSecondary() }, 120_000)
+    return () => { clearTimeout(deferTimer); clearInterval(iv) }
+  }, [refreshCritical, refreshSecondary])
 
   const handleLayoutChange = useCallback((_layout: Layout[], allLayouts: Layouts) => {
     setLayouts(allLayouts)

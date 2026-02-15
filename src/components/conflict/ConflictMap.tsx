@@ -355,7 +355,7 @@ export default function ConflictMap({ aircraft, events, hotspots, cyberEvents = 
       })
     }
 
-    // Vessel markers
+    // Vessel markers — cap at 200 for DOM performance, prioritize moving vessels
     if (layers.vessels && vessels.length > 0) {
       const VESSEL_TYPE_COLORS: Record<string, string> = {
         'Military Ops': '#ef4444', 'Law Enforcement': '#f97316', 'SAR': '#eab308',
@@ -363,7 +363,12 @@ export default function ConflictMap({ aircraft, events, hotspots, cyberEvents = 
         'Fishing': '#64748b', 'Tug': '#a78bfa',
       }
 
-      vessels.forEach(v => {
+      const MAX_MAP_VESSELS = 200
+      const sortedVessels = [...vessels]
+        .sort((a, b) => (b.sog || 0) - (a.sog || 0)) // moving vessels first
+        .slice(0, MAX_MAP_VESSELS)
+
+      sortedVessels.forEach(v => {
         if (!v.latitude || !v.longitude) return
         const color = VESSEL_TYPE_COLORS[v.shipTypeName] || '#0ea5e9'
         const isMoving = v.sog > 0.5
@@ -371,28 +376,35 @@ export default function ConflictMap({ aircraft, events, hotspots, cyberEvents = 
 
         const el = document.createElement('div')
         el.className = 'conflict-marker vessel-marker'
-        // Ship-shaped SVG marker rotated to heading
+        el.style.cursor = 'pointer'
         el.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" stroke="${color}" stroke-width="1.5" style="transform:rotate(${v.heading || 0}deg);opacity:${isMoving ? 0.9 : 0.5}"><path d="M12 2L8 12H4L8 22H16L20 12H16L12 2Z"/></svg>`
         el.title = `${v.flag} ${v.name} · ${v.shipTypeName} · ${v.sog > 0 ? v.sog.toFixed(1) + ' kts' : 'Stationary'}`
 
-        const popup = new maplibregl.Popup({ offset: 10, closeButton: false, className: 'nsit-popup' })
-          .setHTML(`
-            <div style="font-family:monospace;font-size:10px;color:#fff;background:#1a1a1a;padding:6px 8px;border:1px solid #333;border-radius:4px;max-width:220px;">
-              <div style="font-weight:bold;color:${color};">${v.flag} ${v.name}</div>
-              <div style="color:#888;">${v.shipTypeName}</div>
-              <div>Speed: ${v.sog > 0 ? v.sog.toFixed(1) + ' kts' : 'Stationary'}</div>
-              <div>Heading: ${v.heading >= 0 ? Math.round(v.heading) + '°' : '—'}</div>
-              <div>Status: ${v.navStatusName}</div>
-              ${v.destination ? `<div>Dest: ${v.destination}</div>` : ''}
-              ${v.callSign ? `<div style="color:#666;">Call: ${v.callSign}</div>` : ''}
-              <div style="color:#666;">MMSI: ${v.mmsi}</div>
-            </div>
-          `)
-
+        // Lazy popup — only created on first click
         const marker = new maplibregl.Marker({ element: el })
           .setLngLat([v.longitude, v.latitude])
-          .setPopup(popup)
           .addTo(mapRef.current!)
+
+        let popupCreated = false
+        el.addEventListener('click', () => {
+          if (!popupCreated) {
+            marker.setPopup(new maplibregl.Popup({ offset: 10, closeButton: false, className: 'nsit-popup' })
+              .setHTML(`
+                <div style="font-family:monospace;font-size:10px;color:#fff;background:#1a1a1a;padding:6px 8px;border:1px solid #333;border-radius:4px;max-width:220px;">
+                  <div style="font-weight:bold;color:${color};">${v.flag} ${v.name}</div>
+                  <div style="color:#888;">${v.shipTypeName}</div>
+                  <div>Speed: ${v.sog > 0 ? v.sog.toFixed(1) + ' kts' : 'Stationary'}</div>
+                  <div>Heading: ${v.heading >= 0 ? Math.round(v.heading) + '°' : '—'}</div>
+                  <div>Status: ${v.navStatusName}</div>
+                  ${v.destination ? `<div>Dest: ${v.destination}</div>` : ''}
+                  ${v.callSign ? `<div style="color:#666;">Call: ${v.callSign}</div>` : ''}
+                  <div style="color:#666;">MMSI: ${v.mmsi}</div>
+                </div>
+              `))
+            popupCreated = true
+          }
+        })
+
         newMarkers.push(marker)
       })
     }

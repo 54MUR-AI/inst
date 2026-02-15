@@ -907,53 +907,37 @@ async function _fetchVesselsImpl(): Promise<Vessel[]> {
     const json = await res.json()
     const features = json.features || []
 
-    // Also fetch vessel metadata for names (separate endpoint)
-    let metaMap = new Map<number, { name: string; callSign: string; destination: string; shipType: number; draught: number; length: number; width: number }>()
-    try {
-      const metaRes = await fetch(`${DIGITRAFFIC_AIS}/vessels`, {
-        signal: AbortSignal.timeout(15000),
-        headers: { 'Accept': 'application/json', 'Digitraffic-User': 'NSIT/RMG' },
-      })
-      if (metaRes.ok) {
-        const metaArr = await metaRes.json()
-        for (const v of metaArr) {
-          metaMap.set(v.mmsi, {
-            name: v.name || '',
-            callSign: v.callSign || '',
-            destination: v.destination || '',
-            shipType: v.shipType ?? 0,
-            draught: v.draught ?? 0,
-            length: v.referencePointA + v.referencePointB || 0,
-            width: v.referencePointC + v.referencePointD || 0,
-          })
-        }
-      }
-    } catch { /* metadata is optional, locations are enough */ }
+    // NOTE: We intentionally skip the /vessels metadata endpoint.
+    // It downloads the ENTIRE vessel database (50k+ records, ~10MB) which
+    // kills performance. The /locations endpoint has enough data (mmsi,
+    // position, speed, heading, navStatus, shipType) for our use case.
+
+    const MAX_VESSELS = 500 // cap markers for map performance
 
     const vessels: Vessel[] = features
       .filter((f: any) => f.geometry?.coordinates)
+      .slice(0, MAX_VESSELS * 2) // pre-filter before mapping (some will be filtered out)
       .map((f: any) => {
         const props = f.properties || {}
         const [lng, lat] = f.geometry.coordinates
         const mmsi = props.mmsi || 0
-        const meta = metaMap.get(mmsi)
-        const shipType = meta?.shipType ?? props.shipType ?? 0
+        const shipType = props.shipType ?? 0
 
         return {
           mmsi,
-          name: meta?.name || `MMSI ${mmsi}`,
+          name: props.name || `MMSI ${mmsi}`,
           shipType,
           shipTypeName: getShipTypeName(shipType),
-          callSign: meta?.callSign || '',
-          destination: meta?.destination || '',
+          callSign: props.callSign || '',
+          destination: props.destination || '',
           latitude: lat,
           longitude: lng,
           sog: props.sog ?? 0,
           cog: props.cog ?? 0,
           heading: props.heading ?? props.cog ?? 0,
-          draught: meta?.draught ?? 0,
-          length: meta?.length ?? 0,
-          width: meta?.width ?? 0,
+          draught: props.draught ?? 0,
+          length: 0,
+          width: 0,
           navStatus: props.navStat ?? 15,
           navStatusName: NAV_STATUS_NAMES[props.navStat] || 'Unknown',
           timestamp: props.timestampExternal || Date.now(),
@@ -961,6 +945,7 @@ async function _fetchVesselsImpl(): Promise<Vessel[]> {
         }
       })
       .filter((v: Vessel) => v.latitude !== 0 && v.longitude !== 0)
+      .slice(0, MAX_VESSELS)
 
     vesselFailed = false
     vesselCache = { data: vessels, ts: Date.now() }
