@@ -30,7 +30,7 @@ import SettingsPanel from './components/SettingsPanel'
 import type { AiSettings } from './components/SettingsPanel'
 import ConflictDashboard from './components/conflict/ConflictDashboard'
 import LogisticsDashboard from './components/logistics/LogisticsDashboard'
-import { ScanEye, Zap, TrendingUp, Crosshair, Truck } from 'lucide-react'
+import { ScanEye, Zap, TrendingUp, Crosshair, Truck, ChevronDown } from 'lucide-react'
 import { setAuthToken, bootstrapAuth } from './lib/ldgrBridge'
 import { loadSavedLayouts, saveLayouts, loadVisibility, saveVisibility } from './lib/widgetRegistry'
 
@@ -180,8 +180,21 @@ export default function App() {
           <span className="text-sm font-bold text-white tracking-wider flex items-center">N-S<ScanEye className="w-4 h-4 text-samurai-red inline-block mx-[1px]" />T</span>
           <span className="text-[10px] text-samurai-steel font-mono hidden sm:inline">Networked - Strategic Intelligence Tool</span>
         </div>
-        {/* Tab switcher */}
-        <div className="flex items-center gap-0.5 bg-samurai-grey-dark/40 rounded-md p-0.5">
+        {/* Tab switcher — dropdown on mobile, buttons on desktop */}
+        <div className="relative sm:hidden">
+          <select
+            value={activeTab}
+            onChange={e => { const t = e.target.value as 'conflict' | 'economy' | 'logistics'; setActiveTab(t); localStorage.setItem('nsit-active-tab', t) }}
+            className="appearance-none bg-samurai-grey-dark/60 border border-samurai-grey-dark rounded-md pl-2 pr-6 py-1 text-[10px] font-mono font-bold uppercase cursor-pointer focus:outline-none focus:border-samurai-red/50"
+            style={{ color: activeTab === 'conflict' ? '#ef4444' : activeTab === 'economy' ? '#34d399' : '#22d3ee' }}
+          >
+            <option value="conflict" className="bg-samurai-black-lighter text-red-500">⚔ CONFLICT</option>
+            <option value="economy" className="bg-samurai-black-lighter text-emerald-400">↗ ECONOMY</option>
+            <option value="logistics" className="bg-samurai-black-lighter text-cyan-400">⛵ LOGISTICS</option>
+          </select>
+          <ChevronDown className="w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-samurai-steel" />
+        </div>
+        <div className="hidden sm:flex items-center gap-0.5 bg-samurai-grey-dark/40 rounded-md p-0.5">
           <button
             onClick={() => { setActiveTab('conflict'); localStorage.setItem('nsit-active-tab', 'conflict') }}
             className={`flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-mono font-bold transition-all ${
