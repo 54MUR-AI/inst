@@ -100,6 +100,10 @@ function isMilitaryIcao(icao24: string): boolean {
 // OAuth2 token cache
 let openskyToken: { token: string; expiresAt: number } | null = null
 let openskyAuthMode: 'oauth2' | 'basic' | 'anon' = 'anon'
+// Remember when OAuth2/Basic Auth are CORS-blocked so we don't spam failed requests
+let openskyAuthCorsBlocked = false
+let openskyAuthCorsBlockedAt = 0
+const OPENSKY_AUTH_CORS_RETRY = 1_800_000 // 30 min before retrying auth
 
 /**
  * Get a Bearer token via OAuth2 Client Credentials flow.
@@ -186,6 +190,12 @@ async function getOpenSkyAuth(): Promise<{ headers: Record<string, string>; usin
   const headers: Record<string, string> = {}
   let usingKey = false
 
+  // If auth is known to be CORS-blocked, skip entirely until retry window
+  if (openskyAuthCorsBlocked && Date.now() - openskyAuthCorsBlockedAt < OPENSKY_AUTH_CORS_RETRY) {
+    openskyAuthMode = 'anon'
+    return { headers, usingKey }
+  }
+
   try {
     const creds = await getApiKeyWithName('opensky')
     if (creds) {
@@ -196,10 +206,13 @@ async function getOpenSkyAuth(): Promise<{ headers: Record<string, string>; usin
         openskyAuthMode = 'oauth2'
         usingKey = true
       } else {
-        // Fallback to Basic Auth for legacy accounts
-        headers['Authorization'] = 'Basic ' + btoa(`${creds.keyName}:${creds.key}`)
-        openskyAuthMode = 'basic'
-        usingKey = true
+        // OAuth2 failed (likely CORS) — skip Basic Auth too since OpenSky's
+        // auth endpoints don't support CORS from browser origins.
+        // Fall back to anonymous mode.
+        openskyAuthCorsBlocked = true
+        openskyAuthCorsBlockedAt = Date.now()
+        openskyAuthMode = 'anon'
+        console.info('[OpenSky] Auth CORS-blocked — using anonymous mode for 30min')
       }
     } else {
       openskyAuthMode = 'anon'
@@ -262,6 +275,9 @@ async function _fetchOpenSkyRegion(
 async function _handleOpenSky401(
   _oldHeaders: Record<string, string>
 ): Promise<Record<string, string> | null> {
+  // Don't retry auth if we know it's CORS-blocked
+  if (openskyAuthCorsBlocked) return null
+
   try {
     const creds = await getApiKeyWithName('opensky')
     if (!creds) return null
@@ -273,8 +289,10 @@ async function _handleOpenSky401(
       return { 'Authorization': `Bearer ${token}` }
     }
 
-    // If OAuth2 refresh failed, try Basic Auth
-    return { 'Authorization': 'Basic ' + btoa(`${creds.keyName}:${creds.key}`) }
+    // OAuth2 refresh failed — mark as CORS-blocked, don't try Basic Auth
+    openskyAuthCorsBlocked = true
+    openskyAuthCorsBlockedAt = Date.now()
+    return null
   } catch {
     return null
   }
@@ -555,6 +573,11 @@ export async function fetchAirportActivity(
       }),
     ])
 
+    // If both fetches were rejected (CORS/network), bail immediately
+    if (arrRes.status === 'rejected' && depRes.status === 'rejected') {
+      throw new Error('OPENSKY_NETWORK_ERROR')
+    }
+
     // Bail immediately on 429 so the sequential loop can stop
     const check429 = (result: PromiseSettledResult<Response>) => {
       if (result.status === 'fulfilled' && result.value.status === 429) {
@@ -600,6 +623,12 @@ export async function fetchAirportActivity(
   } catch (err: any) {
     // Re-throw rate limit errors so the sequential loop can bail out
     if (err?.message === 'OPENSKY_RATE_LIMITED') throw err
+    // Re-throw network errors (CORS blocks, timeouts) so the loop can bail
+    if (err?.message === 'OPENSKY_NETWORK_ERROR') throw err
+    // If both fetches failed with TypeError (CORS), signal network error
+    if (err instanceof TypeError) {
+      throw new Error('OPENSKY_NETWORK_ERROR')
+    }
     console.warn(`[OpenSky] Airport activity error for ${airportIcao}:`, err)
     return null
   }
@@ -617,17 +646,33 @@ export async function fetchAllMilitaryAirbaseActivity(hours = 24): Promise<Airpo
 
   const results: AirportActivity[] = []
   const delay = (ms: number) => new Promise(r => setTimeout(r, ms))
+  let consecutiveFailures = 0
 
   for (const base of MILITARY_AIRBASES) {
     try {
       const activity = await fetchAirportActivity(base.icao, hours)
-      if (activity) results.push(activity)
+      if (activity) {
+        results.push(activity)
+        consecutiveFailures = 0
+      } else {
+        consecutiveFailures++
+      }
     } catch (err: any) {
-      // Stop immediately if rate-limited — no point hammering the API
+      // Stop immediately if rate-limited or network-blocked
       if (err?.message === 'OPENSKY_RATE_LIMITED') {
         console.warn('[OpenSky] Rate limited — stopping airbase activity fetch')
         break
       }
+      if (err?.message === 'OPENSKY_NETWORK_ERROR') {
+        console.warn('[OpenSky] Network/CORS error — stopping airbase activity fetch')
+        break
+      }
+      consecutiveFailures++
+    }
+    // Bail after 2 consecutive failures (API is likely down or blocked)
+    if (consecutiveFailures >= 2) {
+      console.warn(`[OpenSky] ${consecutiveFailures} consecutive failures — stopping airbase fetch`)
+      break
     }
     // 1.5s delay between bases to stay under rate limits
     await delay(1500)
