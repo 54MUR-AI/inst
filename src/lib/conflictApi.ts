@@ -597,7 +597,9 @@ export async function fetchAirportActivity(
 
     airportActivityCache.set(airportIcao, { data: activity, ts: Date.now() })
     return activity
-  } catch (err) {
+  } catch (err: any) {
+    // Re-throw rate limit errors so the sequential loop can bail out
+    if (err?.message === 'OPENSKY_RATE_LIMITED') throw err
     console.warn(`[OpenSky] Airport activity error for ${airportIcao}:`, err)
     return null
   }
