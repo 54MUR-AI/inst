@@ -95,6 +95,7 @@ export default function ConflictDashboard() {
   const [hotspots, setHotspots] = useState<Hotspot[]>([])
   const [cyberEvents, setCyberEvents] = useState<CyberEvent[]>([])
   const [vessels, setVessels] = useState<Vessel[]>([])
+  const [filteredVessels, setFilteredVessels] = useState<Vessel[] | null>(null) // null = no filter active, use all
   const [activeTrack, setActiveTrack] = useState<AircraftTrack | null>(null)
   const [mapLayers, setMapLayers] = useState({ aircraft: true, events: true, hotspots: true, cyber: true, vessels: true })
 
@@ -158,7 +159,7 @@ export default function ConflictDashboard() {
               events={events}
               hotspots={hotspots}
               cyberEvents={cyberEvents}
-              vessels={vessels}
+              vessels={filteredVessels ?? vessels}
               activeTrack={activeTrack}
               layers={mapLayers}
               onLayerToggle={handleLayerToggle}
@@ -202,7 +203,7 @@ export default function ConflictDashboard() {
         </div>
         <div key="vessel-tracker">
           <WidgetPanel title="Vessel Tracker" icon="ship" live pipeline="ais">
-            <VesselTracker />
+            <VesselTracker vessels={vessels} onFilteredChange={setFilteredVessels} />
           </WidgetPanel>
         </div>
         <div key="cyber-threats">

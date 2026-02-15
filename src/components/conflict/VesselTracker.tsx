@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Ship, RefreshCw, Filter, Anchor, Navigation } from 'lucide-react'
-import { fetchVessels, fetchMilitaryVessels, type Vessel } from '../../lib/conflictApi'
+import { useState, useEffect } from 'react'
+import { Ship, Filter, Anchor, Navigation } from 'lucide-react'
+import { type Vessel } from '../../lib/conflictApi'
 
 const TYPE_COLORS: Record<string, string> = {
   'Military Ops': '#ef4444',
@@ -18,32 +18,36 @@ function typeColor(typeName: string): string {
   return TYPE_COLORS[typeName] || '#94a3b8'
 }
 
-export default function VesselTracker() {
-  const [vessels, setVessels] = useState<Vessel[]>([])
-  const [loading, setLoading] = useState(true)
+interface VesselTrackerProps {
+  vessels: Vessel[]
+  onFilteredChange?: (filtered: Vessel[]) => void
+}
+
+export default function VesselTracker({ vessels: allVessels, onFilteredChange }: VesselTrackerProps) {
   const [milOnly, setMilOnly] = useState(false)
   const [sortBy, setSortBy] = useState<'speed' | 'type' | 'flag'>('speed')
   const [typeFilter, setTypeFilter] = useState<string>('all')
 
-  const refresh = useCallback(async () => {
-    try {
-      const data = milOnly ? await fetchMilitaryVessels() : await fetchVessels()
-      setVessels(data)
-    } catch { /* handled in api */ }
-    setLoading(false)
-  }, [milOnly])
+  const loading = allVessels.length === 0
 
-  useEffect(() => {
-    setLoading(true)
-    refresh()
-    const iv = setInterval(refresh, 120_000) // 2 min — matches AIS cache TTL
-    return () => clearInterval(iv)
-  }, [refresh])
+  // Apply mil-only filter first
+  const baseVessels = milOnly
+    ? allVessels.filter(v => {
+        const MILITARY_TYPES = new Set([35, 50, 51, 52, 53, 54, 55])
+        return MILITARY_TYPES.has(v.shipType) || MILITARY_TYPES.has(Math.floor(v.shipType / 10) * 10)
+          || /navy|coast guard|patrol|military|warship/i.test(v.name)
+      })
+    : allVessels
 
   // Get unique ship types for filter dropdown
-  const shipTypes = [...new Set(vessels.map(v => v.shipTypeName))].sort()
+  const shipTypes = [...new Set(baseVessels.map(v => v.shipTypeName))].sort()
 
-  const filtered = typeFilter === 'all' ? vessels : vessels.filter(v => v.shipTypeName === typeFilter)
+  const filtered = typeFilter === 'all' ? baseVessels : baseVessels.filter(v => v.shipTypeName === typeFilter)
+
+  // Notify parent of filtered vessels for map sync
+  useEffect(() => {
+    onFilteredChange?.(filtered)
+  }, [filtered.length, milOnly, typeFilter])
 
   const sorted = [...filtered].sort((a, b) => {
     if (sortBy === 'speed') return (b.sog || 0) - (a.sog || 0)
@@ -102,9 +106,6 @@ export default function VesselTracker() {
           </button>
         ))}
 
-        <button onClick={() => { setLoading(true); refresh() }} className="ml-auto text-samurai-steel hover:text-white">
-          <RefreshCw className="w-3 h-3" />
-        </button>
       </div>
 
       {/* Stats bar */}
