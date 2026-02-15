@@ -85,7 +85,12 @@ function saveConflictLayouts(layouts: Layouts) {
   } catch { /* quota */ }
 }
 
-export default function ConflictDashboard() {
+interface ConflictDashboardProps {
+  widgetVisibility: Record<string, boolean>
+}
+
+export default function ConflictDashboard({ widgetVisibility }: ConflictDashboardProps) {
+  const isVisible = (id: string) => widgetVisibility[id] !== false
   const [layouts, setLayouts] = useState<Layouts>(() => loadConflictLayouts() || CONFLICT_LAYOUTS)
   const [gisLayers, setGisLayers] = useState<GisLayer[]>([])
 
@@ -152,7 +157,7 @@ export default function ConflictDashboard() {
         compactType="vertical"
         margin={[8, 8]}
       >
-        <div key="conflict-map">
+        {isVisible('conflict-map') && <div key="conflict-map">
           <WidgetPanel title="Global Conflict Map" icon="globe" live>
             <ConflictMap
               aircraft={aircraft}
@@ -165,62 +170,62 @@ export default function ConflictDashboard() {
               onLayerToggle={handleLayerToggle}
             />
           </WidgetPanel>
-        </div>
-        <div key="threat-assessment">
+        </div>}
+        {isVisible('threat-assessment') && <div key="threat-assessment">
           <WidgetPanel title="Threat Assessment" icon="shield" live>
             <ThreatAssessment />
           </WidgetPanel>
-        </div>
-        <div key="aircraft-tracker">
+        </div>}
+        {isVisible('aircraft-tracker') && <div key="aircraft-tracker">
           <WidgetPanel title="Aircraft Tracker" icon="plane" live pipeline="opensky">
             <AircraftTracker onTrackSelect={setActiveTrack} />
           </WidgetPanel>
-        </div>
-        <div key="conflict-events">
+        </div>}
+        {isVisible('conflict-events') && <div key="conflict-events">
           <WidgetPanel title="Conflict Events" icon="crosshair" live pipeline="gdelt">
             <ConflictEventsFeed />
           </WidgetPanel>
-        </div>
-        <div key="conflict-news">
+        </div>}
+        {isVisible('conflict-news') && <div key="conflict-news">
           <WidgetPanel title="Conflict Intel" icon="newspaper" live pipeline="gdelt">
             <ConflictNewsFeed />
           </WidgetPanel>
-        </div>
-        <div key="hotspot-detection">
+        </div>}
+        {isVisible('hotspot-detection') && <div key="hotspot-detection">
           <WidgetPanel title="Hotspot Detection" icon="flame" live pipeline="firms">
             <HotspotDetection />
           </WidgetPanel>
-        </div>
-        <div key="defense-stocks">
+        </div>}
+        {isVisible('defense-stocks') && <div key="defense-stocks">
           <WidgetPanel title="Defense Sector" icon="shield" live pipeline="yahoo">
             <DefenseStocks />
           </WidgetPanel>
-        </div>
-        <div key="nuclear-threat">
+        </div>}
+        {isVisible('nuclear-threat') && <div key="nuclear-threat">
           <WidgetPanel title="Nuclear Threat Level" icon="alert-triangle">
             <NuclearThreatLevel />
           </WidgetPanel>
-        </div>
-        <div key="vessel-tracker">
+        </div>}
+        {isVisible('vessel-tracker') && <div key="vessel-tracker">
           <WidgetPanel title="Vessel Tracker" icon="ship" live pipeline="ais">
             <VesselTracker vessels={vessels} onFilteredChange={setFilteredVessels} />
           </WidgetPanel>
-        </div>
-        <div key="cyber-threats">
+        </div>}
+        {isVisible('cyber-threats') && <div key="cyber-threats">
           <WidgetPanel title="Cyber Threats" icon="shield" live pipeline="cve">
             <CyberThreatFeed />
           </WidgetPanel>
-        </div>
-        <div key="airbase-monitor">
+        </div>}
+        {isVisible('airbase-monitor') && <div key="airbase-monitor">
           <WidgetPanel title="Airbase Monitor" icon="tower-control" live pipeline="opensky">
             <AirbaseMonitor />
           </WidgetPanel>
-        </div>
-        <div key="gis-overlays">
+        </div>}
+        {isVisible('gis-overlays') && <div key="gis-overlays">
           <WidgetPanel title="GIS Overlays" icon="layers">
             <GisOverlayManager layers={gisLayers} onLayersChange={setGisLayers} />
           </WidgetPanel>
-        </div>
+        </div>}
       </ResponsiveGridLayout>
     </div>
   )

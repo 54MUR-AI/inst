@@ -5,13 +5,14 @@ import OllamaSetupWizard from './OllamaSetupWizard'
 import { getSupabase } from '../lib/supabase'
 import { decryptApiKey } from '../lib/ldgrBridge'
 
-import { WIDGETS, clearSavedLayouts } from '../lib/widgetRegistry'
+import { WIDGETS, clearSavedLayouts, type WidgetTab } from '../lib/widgetRegistry'
 
 export interface AiSettings { provider: string; model: string; apiKey: string }
 interface SettingsPanelProps {
   onSettingsChange: (s: AiSettings) => void
   widgetVisibility: Record<string, boolean>
   onVisibilityChange: (vis: Record<string, boolean>) => void
+  activeTab: WidgetTab
 }
 
 const AI_PROVIDERS: Record<string, { name: string; models: string[]; requiresKey: boolean }> = {
@@ -42,7 +43,10 @@ function getUserEmail(): string | null {
   return null
 }
 
-export default function SettingsPanel({ onSettingsChange, widgetVisibility, onVisibilityChange }: SettingsPanelProps) {
+const TAB_LABELS: Record<WidgetTab, string> = { economy: 'Economy', conflict: 'Conflict', logistics: 'Logistics' }
+const TAB_COLORS: Record<WidgetTab, string> = { economy: 'text-emerald-400', conflict: 'text-red-500', logistics: 'text-cyan-400' }
+
+export default function SettingsPanel({ onSettingsChange, widgetVisibility, onVisibilityChange, activeTab }: SettingsPanelProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [provider, setProvider] = useState(() => localStorage.getItem(STORAGE_PROVIDER) || 'ollama')
   const [availableProviders, setAvailableProviders] = useState<string[]>(['ollama'])
@@ -256,13 +260,13 @@ export default function SettingsPanel({ onSettingsChange, widgetVisibility, onVi
         <div className="mb-6 border-t border-samurai-grey-dark pt-6">
           <div className="flex items-center justify-between mb-4">
             <label className="text-white font-bold uppercase text-sm flex items-center gap-2">
-              <LayoutGrid className="w-4 h-4 text-samurai-red" />Dashboard Widgets
+              <LayoutGrid className="w-4 h-4 text-samurai-red" />Dashboard Widgets <span className={`ml-1 ${TAB_COLORS[activeTab]}`}>— {TAB_LABELS[activeTab]}</span>
             </label>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  const all: Record<string, boolean> = {}
-                  WIDGETS.forEach(w => { all[w.id] = true })
+                  const all: Record<string, boolean> = { ...widgetVisibility }
+                  WIDGETS.filter(w => w.tab === activeTab).forEach(w => { all[w.id] = true })
                   onVisibilityChange(all)
                 }}
                 className="text-[9px] font-bold px-2 py-1 rounded bg-samurai-grey-dark/50 text-samurai-steel hover:text-white transition-colors"
@@ -278,7 +282,7 @@ export default function SettingsPanel({ onSettingsChange, widgetVisibility, onVi
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            {WIDGETS.map(w => {
+            {WIDGETS.filter(w => w.tab === activeTab).map(w => {
               const visible = widgetVisibility[w.id] !== false
               return (
                 <button

@@ -58,7 +58,12 @@ function saveLogisticsLayouts(layouts: Layouts) {
   } catch { /* quota */ }
 }
 
-export default function LogisticsDashboard() {
+interface LogisticsDashboardProps {
+  widgetVisibility: Record<string, boolean>
+}
+
+export default function LogisticsDashboard({ widgetVisibility }: LogisticsDashboardProps) {
+  const isVisible = (id: string) => widgetVisibility[id] !== false
   const [layouts, setLayouts] = useState<Layouts>(() => loadLogisticsLayouts() || LOGISTICS_LAYOUTS)
 
   const handleLayoutChange = useCallback((_layout: Layout[], allLayouts: Layouts) => {
@@ -79,36 +84,36 @@ export default function LogisticsDashboard() {
         compactType="vertical"
         margin={[8, 8]}
       >
-        <div key="chokepoint-map">
+        {isVisible('chokepoint-map') && <div key="chokepoint-map">
           <WidgetPanel title="Global Shipping Chokepoints" icon="globe" live>
             <ChokepointMap />
           </WidgetPanel>
-        </div>
-        <div key="chokepoint-monitor">
+        </div>}
+        {isVisible('chokepoint-monitor') && <div key="chokepoint-monitor">
           <WidgetPanel title="Chokepoint Status" icon="alert-triangle" live>
             <ChokepointMonitor />
           </WidgetPanel>
-        </div>
-        <div key="supply-chain-news">
+        </div>}
+        {isVisible('supply-chain-news') && <div key="supply-chain-news">
           <WidgetPanel title="Supply Chain Intel" icon="newspaper" live pipeline="gdelt">
             <SupplyChainNewsFeed />
           </WidgetPanel>
-        </div>
-        <div key="shipping-stocks">
+        </div>}
+        {isVisible('shipping-stocks') && <div key="shipping-stocks">
           <WidgetPanel title="Shipping & Logistics" icon="ship" live pipeline="yahoo">
             <ShippingStocks />
           </WidgetPanel>
-        </div>
-        <div key="semiconductor-tracker">
+        </div>}
+        {isVisible('semiconductor-tracker') && <div key="semiconductor-tracker">
           <WidgetPanel title="Semiconductor Supply" icon="cpu" live pipeline="yahoo">
             <SemiconductorTracker />
           </WidgetPanel>
-        </div>
-        <div key="food-energy">
+        </div>}
+        {isVisible('food-energy') && <div key="food-energy">
           <WidgetPanel title="Food & Energy Security" icon="wheat" live pipeline="yahoo">
             <FoodEnergyIndex />
           </WidgetPanel>
-        </div>
+        </div>}
       </ResponsiveGridLayout>
     </div>
   )

@@ -238,10 +238,10 @@ export default function App() {
 
       {/* All tabs rendered simultaneously, hidden via CSS to preserve state */}
       <div style={{ display: activeTab === 'conflict' ? 'contents' : 'none' }}>
-        <ConflictDashboard />
+        <ConflictDashboard widgetVisibility={visibility} />
       </div>
       <div style={{ display: activeTab === 'logistics' ? 'contents' : 'none' }}>
-        <LogisticsDashboard />
+        <LogisticsDashboard widgetVisibility={visibility} />
       </div>
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4" style={{ display: activeTab === 'economy' ? undefined : 'none' }}>
         <ResponsiveGridLayout
@@ -363,6 +363,7 @@ export default function App() {
         onSettingsChange={setAiSettings}
         widgetVisibility={visibility}
         onVisibilityChange={handleVisibilityChange}
+        activeTab={activeTab}
       />
     </div>
   )
