@@ -113,8 +113,8 @@ export default function App() {
   const [isLive, setIsLive] = useState(true)
   const [activeTab, setActiveTab] = useState<'economy' | 'conflict' | 'logistics'>(() => {
     const saved = localStorage.getItem('nsit-active-tab')
-    if (saved === 'conflict' || saved === 'logistics') return saved
-    return 'economy'
+    if (saved === 'economy' || saved === 'logistics') return saved
+    return 'conflict'
   })
   const [visibility, setVisibility] = useState<Record<string, boolean>>(loadVisibility)
   const [aiSettings, setAiSettings] = useState<AiSettings>({
@@ -183,17 +183,6 @@ export default function App() {
         {/* Tab switcher */}
         <div className="flex items-center gap-0.5 bg-samurai-grey-dark/40 rounded-md p-0.5">
           <button
-            onClick={() => { setActiveTab('economy'); localStorage.setItem('nsit-active-tab', 'economy') }}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-mono font-bold transition-all ${
-              activeTab === 'economy'
-                ? 'bg-samurai-red/20 text-samurai-red'
-                : 'text-samurai-steel hover:text-white'
-            }`}
-          >
-            <TrendingUp className="w-3 h-3" />
-            ECONOMY
-          </button>
-          <button
             onClick={() => { setActiveTab('conflict'); localStorage.setItem('nsit-active-tab', 'conflict') }}
             className={`flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-mono font-bold transition-all ${
               activeTab === 'conflict'
@@ -203,6 +192,17 @@ export default function App() {
           >
             <Crosshair className="w-3 h-3" />
             CONFLICT
+          </button>
+          <button
+            onClick={() => { setActiveTab('economy'); localStorage.setItem('nsit-active-tab', 'economy') }}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-mono font-bold transition-all ${
+              activeTab === 'economy'
+                ? 'bg-emerald-600/20 text-emerald-400'
+                : 'text-samurai-steel hover:text-white'
+            }`}
+          >
+            <TrendingUp className="w-3 h-3" />
+            ECONOMY
           </button>
           <button
             onClick={() => { setActiveTab('logistics'); localStorage.setItem('nsit-active-tab', 'logistics') }}

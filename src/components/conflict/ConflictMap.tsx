@@ -35,12 +35,12 @@ function countryToCoords(country: string): [number, number] | null {
 }
 
 const CYBER_CATEGORY_COLORS: Record<string, string> = {
-  ransomware: '#e63946',
-  apt: '#f97316',
-  ddos: '#eab308',
-  breach: '#ef4444',
+  ransomware: '#a855f7',
+  apt: '#9333ea',
+  ddos: '#7c3aed',
+  breach: '#c084fc',
   vulnerability: '#8b5cf6',
-  cyber: '#06b6d4',
+  cyber: '#a78bfa',
 }
 
 interface ConflictMapProps {
@@ -57,6 +57,7 @@ interface ConflictMapProps {
     vessels?: boolean
   }
   onBoundsChange?: (bounds: { lamin: number; lomin: number; lamax: number; lomax: number }) => void
+  onLayerToggle?: (key: string) => void
 }
 
 const DARK_STYLE = {
@@ -85,7 +86,7 @@ const DARK_STYLE = {
   ],
 }
 
-export default function ConflictMap({ aircraft, events, hotspots, cyberEvents = [], vessels = [], layers, onBoundsChange }: ConflictMapProps) {
+export default function ConflictMap({ aircraft, events, hotspots, cyberEvents = [], vessels = [], layers, onBoundsChange, onLayerToggle }: ConflictMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const markersRef = useRef<maplibregl.Marker[]>([])
@@ -150,7 +151,7 @@ export default function ConflictMap({ aircraft, events, hotspots, cyberEvents = 
         if (a.latitude == null || a.longitude == null) return
         const el = document.createElement('div')
         el.className = 'conflict-marker aircraft-marker'
-        el.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00bcd4" stroke-width="2" style="transform:rotate(${a.trueTrack || 0}deg)"><path d="M12 2L8 10H2L6 14L4 22L12 18L20 22L18 14L22 10H16L12 2Z"/></svg>`
+        el.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="#00bcd4" stroke="none" style="transform:rotate(${a.trueTrack || 0}deg)"><path d="M21 16v-2l-8-5V3.5A1.5 1.5 0 0 0 11.5 2 1.5 1.5 0 0 0 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>`
         el.title = `${a.callsign || a.icao24} · ${a.originCountry} · ${a.baroAltitude ? Math.round(a.baroAltitude) + 'm' : 'GND'}`
 
         const popup = new maplibregl.Popup({ offset: 12, closeButton: false, className: 'nsit-popup' })
@@ -315,7 +316,35 @@ export default function ConflictMap({ aircraft, events, hotspots, cyberEvents = 
     markersRef.current = newMarkers
   }, [aircraft, events, hotspots, cyberEvents, vessels, layers, mapReady, clearMarkers])
 
+  const LAYER_DEFS = [
+    { key: 'events', label: 'Events', color: '#e63946' },
+    { key: 'hotspots', label: 'Hotspots', color: '#f97316' },
+    { key: 'cyber', label: 'Cyber', color: '#8b5cf6' },
+    { key: 'aircraft', label: 'Aircraft', color: '#00bcd4' },
+    { key: 'vessels', label: 'Ships', color: '#0ea5e9' },
+  ]
+
   return (
-    <div ref={containerRef} className="w-full h-full rounded-md overflow-hidden" style={{ minHeight: 300 }} />
+    <div className="relative w-full h-full rounded-md overflow-hidden" style={{ minHeight: 300 }}>
+      <div ref={containerRef} className="w-full h-full" />
+      {onLayerToggle && (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 bg-black/70 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/10">
+          {LAYER_DEFS.map(l => (
+            <button
+              key={l.key}
+              onClick={() => onLayerToggle(l.key)}
+              className={`text-[8px] font-mono px-2 py-0.5 rounded-full border transition-all ${
+                (layers as any)[l.key]
+                  ? 'border-current bg-current/10'
+                  : 'border-white/10 opacity-30'
+              }`}
+              style={{ color: l.color }}
+            >
+              {l.label} {(layers as any)[l.key] ? '●' : '○'}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

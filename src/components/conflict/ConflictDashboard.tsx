@@ -120,33 +120,12 @@ export default function ConflictDashboard() {
     saveConflictLayouts(allLayouts)
   }, [])
 
+  const handleLayerToggle = useCallback((key: string) => {
+    setMapLayers(prev => ({ ...prev, [key]: !prev[key as keyof typeof prev] }))
+  }, [])
+
   return (
     <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4">
-      {/* Map layer toggles */}
-      <div className="flex items-center gap-2 mb-2 px-1">
-        <span className="text-[8px] text-samurai-steel font-mono uppercase tracking-wider">MAP LAYERS:</span>
-        {([
-          { key: 'aircraft' as const, label: 'Aircraft', color: '#00bcd4' },
-          { key: 'events' as const, label: 'Events', color: '#e63946' },
-          { key: 'hotspots' as const, label: 'Hotspots', color: '#f97316' },
-          { key: 'cyber' as const, label: 'Cyber', color: '#8b5cf6' },
-          { key: 'vessels' as const, label: 'Vessels', color: '#0ea5e9' },
-        ]).map(l => (
-          <button
-            key={l.key}
-            onClick={() => setMapLayers(prev => ({ ...prev, [l.key]: !prev[l.key] }))}
-            className={`text-[8px] font-mono px-2 py-0.5 rounded border transition-colors ${
-              mapLayers[l.key]
-                ? 'border-current'
-                : 'border-samurai-grey-dark/50 opacity-40'
-            }`}
-            style={{ color: l.color }}
-          >
-            {l.label} {mapLayers[l.key] ? '●' : '○'}
-          </button>
-        ))}
-      </div>
-
       <ResponsiveGridLayout
         className="layout"
         layouts={layouts}
@@ -167,6 +146,7 @@ export default function ConflictDashboard() {
               cyberEvents={cyberEvents}
               vessels={vessels}
               layers={mapLayers}
+              onLayerToggle={handleLayerToggle}
             />
           </WidgetPanel>
         </div>
