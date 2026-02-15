@@ -1215,7 +1215,9 @@ export async function fetchLatestCVEs(limit = 30): Promise<CveEntry[]> {
   }
 
   try {
-    const res = await fetch('https://cve.circl.lu/api/last/30', { signal: AbortSignal.timeout(15000) })
+    // Proxy through Render rewrite to avoid CORS (cve.circl.lu sends duplicate ACAO headers)
+    const cveBase = import.meta.env.DEV ? 'https://cve.circl.lu' : '/api/cve'
+    const res = await fetch(`${cveBase}/api/last/30`, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) {
       cveFailed = true
       cveFailedAt = Date.now()

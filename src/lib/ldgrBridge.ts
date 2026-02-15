@@ -41,11 +41,13 @@ async function decryptText(encryptedBase64: string, userId: string, purpose: str
 interface AuthState {
   accessToken: string | null
   userId: string | null
+  expiresAt: number | null
 }
 
 const auth: AuthState = {
   accessToken: null,
   userId: null,
+  expiresAt: null,
 }
 
 /** Called when RMG sends an auth token via postMessage */
@@ -53,13 +55,41 @@ export function setAuthToken(rawToken: string) {
   try {
     const parsed = JSON.parse(rawToken)
     if (parsed.access_token) {
+      const oldToken = auth.accessToken
       auth.accessToken = parsed.access_token
-      // Decode JWT to get user ID
+      // Decode JWT to get user ID and expiry
       const payload = JSON.parse(atob(parsed.access_token.split('.')[1]))
       auth.userId = payload.sub || null
+      auth.expiresAt = payload.exp ? payload.exp * 1000 : null // convert to ms
+      // Clear key cache when token changes so we re-fetch with fresh auth
+      if (oldToken && oldToken !== parsed.access_token) {
+        keyCache.clear()
+      }
     }
   } catch {
     // ignore parse errors
+  }
+}
+
+/** Check if the current access token is expired (with 60s buffer) */
+function isTokenExpired(): boolean {
+  if (!auth.expiresAt) return false
+  return Date.now() > auth.expiresAt - 60_000
+}
+
+let refreshRequested = false
+let refreshRequestedAt = 0
+const REFRESH_COOLDOWN = 10_000 // Don't spam refresh requests
+
+/** Request a fresh auth token from the RMG parent frame */
+function requestAuthRefresh() {
+  if (refreshRequested && Date.now() - refreshRequestedAt < REFRESH_COOLDOWN) return
+  refreshRequested = true
+  refreshRequestedAt = Date.now()
+  try {
+    window.parent.postMessage({ type: 'NSIT_REQUEST_AUTH' }, '*')
+  } catch {
+    // ignore if not in iframe
   }
 }
 
@@ -139,6 +169,12 @@ export async function getApiKey(serviceName: string): Promise<string | null> {
  */
 export async function getApiKeyWithName(serviceName: string): Promise<{ key: string; keyName: string } | null> {
   if (!auth.accessToken || !auth.userId) return null
+
+  // If token is expired, request a refresh and bail
+  if (isTokenExpired()) {
+    requestAuthRefresh()
+    return null
+  }
 
   // Check cache first
   const cached = keyCache.get(serviceName)
