@@ -160,7 +160,7 @@ export default function SettingsPanel({ onSettingsChange, widgetVisibility, onVi
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-black text-white flex items-center gap-2">
-              <Settings className="w-6 h-6 text-samurai-red" />AI Settings
+              <Settings className="w-6 h-6 text-samurai-red" />Settings
             </h2>
             <p className="text-xs text-white/50 mt-1">Configure AI provider for NSIT analysis</p>
           </div>
