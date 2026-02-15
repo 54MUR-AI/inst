@@ -122,6 +122,7 @@ export default function App() {
     model: localStorage.getItem('nsit-ai-model') || '',
     apiKey: '',
   })
+  const [mobileTabOpen, setMobileTabOpen] = useState(false)
 
   // Listen for RMG auth messages
   // Bootstrap auth from localStorage on mount (standalone mode)
@@ -180,19 +181,41 @@ export default function App() {
           <span className="text-sm font-bold text-white tracking-wider flex items-center">N-S<ScanEye className="w-4 h-4 text-samurai-red inline-block mx-[1px]" />T</span>
           <span className="text-[10px] text-samurai-steel font-mono hidden sm:inline">Networked - Strategic Intelligence Tool</span>
         </div>
-        {/* Tab switcher — dropdown on mobile, buttons on desktop */}
+        {/* Tab switcher — custom dropdown on mobile, buttons on desktop */}
         <div className="relative sm:hidden">
-          <select
-            value={activeTab}
-            onChange={e => { const t = e.target.value as 'conflict' | 'economy' | 'logistics'; setActiveTab(t); localStorage.setItem('nsit-active-tab', t) }}
-            className="appearance-none bg-samurai-grey-dark/60 border border-samurai-grey-dark rounded-md pl-2 pr-6 py-1 text-[10px] font-mono font-bold uppercase cursor-pointer focus:outline-none focus:border-samurai-red/50"
-            style={{ color: activeTab === 'conflict' ? '#ef4444' : activeTab === 'economy' ? '#34d399' : '#22d3ee' }}
+          <button
+            onClick={() => setMobileTabOpen(prev => !prev)}
+            className={`flex items-center gap-1 px-2 pr-5 py-1 rounded-md bg-samurai-grey-dark/60 border border-samurai-grey-dark text-[10px] font-mono font-bold uppercase ${
+              activeTab === 'conflict' ? 'text-red-500' : activeTab === 'economy' ? 'text-emerald-400' : 'text-cyan-400'
+            }`}
           >
-            <option value="conflict" className="bg-samurai-black-lighter text-red-500">⚔ CONFLICT</option>
-            <option value="economy" className="bg-samurai-black-lighter text-emerald-400">↗ ECONOMY</option>
-            <option value="logistics" className="bg-samurai-black-lighter text-cyan-400">⛵ LOGISTICS</option>
-          </select>
+            {activeTab === 'conflict' && <Crosshair className="w-3 h-3" />}
+            {activeTab === 'economy' && <TrendingUp className="w-3 h-3" />}
+            {activeTab === 'logistics' && <Truck className="w-3 h-3" />}
+            {activeTab.toUpperCase()}
+          </button>
           <ChevronDown className="w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-samurai-steel" />
+          {mobileTabOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setMobileTabOpen(false)} />
+              <div className="absolute left-0 top-full mt-1 z-50 bg-samurai-black-lighter border border-samurai-grey-dark rounded-md shadow-lg py-1 min-w-[130px]">
+                {([['conflict', 'text-red-500', 'bg-red-600/20'] as const, ['economy', 'text-emerald-400', 'bg-emerald-600/20'] as const, ['logistics', 'text-cyan-400', 'bg-cyan-600/20'] as const]).map(([tab, color, bg]) => (
+                  <button
+                    key={tab}
+                    onClick={() => { setActiveTab(tab); localStorage.setItem('nsit-active-tab', tab); setMobileTabOpen(false) }}
+                    className={`flex items-center gap-2 w-full px-3 py-1.5 text-[10px] font-mono font-bold uppercase transition-all ${
+                      activeTab === tab ? `${color} ${bg}` : 'text-samurai-steel hover:text-white hover:bg-samurai-grey-dark/50'
+                    }`}
+                  >
+                    {tab === 'conflict' && <Crosshair className="w-3 h-3" />}
+                    {tab === 'economy' && <TrendingUp className="w-3 h-3" />}
+                    {tab === 'logistics' && <Truck className="w-3 h-3" />}
+                    {tab.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
         <div className="hidden sm:flex items-center gap-0.5 bg-samurai-grey-dark/40 rounded-md p-0.5">
           <button
