@@ -369,6 +369,243 @@ export async function fetchMilitaryAircraft(): Promise<Aircraft[]> {
   return all.filter(a => isMilitaryIcao(a.icao24))
 }
 
+// ── OpenSky — Track by Aircraft ──
+// GET /tracks?icao24=<hex>&time=0  (time=0 → live track)
+// Returns waypoints: [time, lat, lng, baro_altitude, true_track, on_ground]
+
+export interface AircraftTrackWaypoint {
+  time: number
+  latitude: number | null
+  longitude: number | null
+  baroAltitude: number | null
+  trueTrack: number | null
+  onGround: boolean
+}
+
+export interface AircraftTrack {
+  icao24: string
+  callsign: string
+  startTime: number
+  endTime: number
+  path: AircraftTrackWaypoint[]
+}
+
+// Simple per-icao track cache (short TTL — tracks change frequently)
+const trackCache = new Map<string, { data: AircraftTrack; ts: number }>()
+const TRACK_CACHE_TTL = 60_000 // 1 min
+
+export async function fetchAircraftTrack(icao24: string, time = 0): Promise<AircraftTrack | null> {
+  const cacheKey = `${icao24}-${time}`
+  const cached = trackCache.get(cacheKey)
+  if (cached && Date.now() - cached.ts < TRACK_CACHE_TTL) return cached.data
+
+  try {
+    const { headers } = await getOpenSkyAuth()
+    const url = `${OPENSKY_API}/tracks/all?icao24=${icao24.toLowerCase()}&time=${time}`
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000), headers })
+
+    if (!res.ok) {
+      if (res.status === 404) return null // no track available
+      console.warn(`[OpenSky] Track fetch failed: ${res.status}`)
+      return null
+    }
+
+    const json = await res.json()
+    const track: AircraftTrack = {
+      icao24: json.icao24 || icao24,
+      callsign: (json.callsign || '').trim(),
+      startTime: json.startTime || 0,
+      endTime: json.endTime || 0,
+      path: (json.path || []).map((wp: any[]) => ({
+        time: wp[0],
+        latitude: wp[1],
+        longitude: wp[2],
+        baroAltitude: wp[3],
+        trueTrack: wp[4],
+        onGround: wp[5] ?? false,
+      })),
+    }
+
+    trackCache.set(cacheKey, { data: track, ts: Date.now() })
+    return track
+  } catch (err) {
+    console.warn('[OpenSky] Track fetch error:', err)
+    return null
+  }
+}
+
+// ── OpenSky — Flights by Aircraft ──
+// GET /flights/aircraft?icao24=<hex>&begin=<unix>&end=<unix>
+// Max interval: 2 days. Batch-processed nightly (previous day or earlier).
+
+export interface FlightRecord {
+  icao24: string
+  callsign: string
+  firstSeen: number
+  lastSeen: number
+  estDepartureAirport: string | null
+  estArrivalAirport: string | null
+  estDepartureAirportHorizDistance: number
+  estDepartureAirportVertDistance: number
+  estArrivalAirportHorizDistance: number
+  estArrivalAirportVertDistance: number
+  departureAirportCandidatesCount: number
+  arrivalAirportCandidatesCount: number
+}
+
+const flightHistoryCache = new Map<string, { data: FlightRecord[]; ts: number }>()
+const FLIGHT_HISTORY_CACHE_TTL = 300_000 // 5 min (data is nightly batch, doesn't change often)
+
+export async function fetchFlightsByAircraft(icao24: string, days = 2): Promise<FlightRecord[]> {
+  const cached = flightHistoryCache.get(icao24)
+  if (cached && Date.now() - cached.ts < FLIGHT_HISTORY_CACHE_TTL) return cached.data
+
+  try {
+    const { headers } = await getOpenSkyAuth()
+    const end = Math.floor(Date.now() / 1000)
+    const begin = end - days * 86400
+    const url = `${OPENSKY_API}/flights/aircraft?icao24=${icao24.toLowerCase()}&begin=${begin}&end=${end}`
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000), headers })
+
+    if (!res.ok) {
+      if (res.status === 404) return [] // no flights found
+      console.warn(`[OpenSky] Flight history fetch failed: ${res.status}`)
+      return []
+    }
+
+    const json = await res.json()
+    const flights: FlightRecord[] = (Array.isArray(json) ? json : []).map((f: any) => ({
+      icao24: f.icao24 || icao24,
+      callsign: (f.callsign || '').trim(),
+      firstSeen: f.firstSeen || 0,
+      lastSeen: f.lastSeen || 0,
+      estDepartureAirport: f.estDepartureAirport || null,
+      estArrivalAirport: f.estArrivalAirport || null,
+      estDepartureAirportHorizDistance: f.estDepartureAirportHorizDistance || 0,
+      estDepartureAirportVertDistance: f.estDepartureAirportVertDistance || 0,
+      estArrivalAirportHorizDistance: f.estArrivalAirportHorizDistance || 0,
+      estArrivalAirportVertDistance: f.estArrivalAirportVertDistance || 0,
+      departureAirportCandidatesCount: f.departureAirportCandidatesCount || 0,
+      arrivalAirportCandidatesCount: f.arrivalAirportCandidatesCount || 0,
+    }))
+
+    flightHistoryCache.set(icao24, { data: flights, ts: Date.now() })
+    return flights
+  } catch (err) {
+    console.warn('[OpenSky] Flight history error:', err)
+    return []
+  }
+}
+
+// ── OpenSky — Airport Activity (Arrivals + Departures) ──
+// GET /flights/arrival?airport=<ICAO>&begin=<unix>&end=<unix>
+// GET /flights/departure?airport=<ICAO>&begin=<unix>&end=<unix>
+// Max interval: 2 days. Batch-processed nightly.
+
+// Key military/strategic airbases to monitor
+export const MILITARY_AIRBASES: { icao: string; name: string; country: string }[] = [
+  { icao: 'ETAR', name: 'Ramstein AB', country: 'Germany' },
+  { icao: 'ETAD', name: 'Spangdahlem AB', country: 'Germany' },
+  { icao: 'EGVA', name: 'RAF Fairford', country: 'UK' },
+  { icao: 'EGUN', name: 'RAF Mildenhall', country: 'UK' },
+  { icao: 'LIPA', name: 'Aviano AB', country: 'Italy' },
+  { icao: 'LTAG', name: 'Incirlik AB', country: 'Turkey' },
+  { icao: 'OKBK', name: 'Al Mubarak AB', country: 'Kuwait' },
+  { icao: 'OKAS', name: 'Ali Al Salem AB', country: 'Kuwait' },
+  { icao: 'OMAD', name: 'Al Dhafra AB', country: 'UAE' },
+  { icao: 'RJTY', name: 'Yokota AB', country: 'Japan' },
+  { icao: 'RKSO', name: 'Osan AB', country: 'South Korea' },
+  { icao: 'PGUA', name: 'Andersen AFB', country: 'Guam' },
+  { icao: 'PHNL', name: 'Hickam AFB', country: 'Hawaii' },
+  { icao: 'KDOV', name: 'Dover AFB', country: 'US' },
+  { icao: 'KWRI', name: 'McGuire AFB', country: 'US' },
+]
+
+export interface AirportActivity {
+  airport: { icao: string; name: string; country: string }
+  arrivals: FlightRecord[]
+  departures: FlightRecord[]
+  totalMovements: number
+}
+
+const airportActivityCache = new Map<string, { data: AirportActivity; ts: number }>()
+const AIRPORT_ACTIVITY_CACHE_TTL = 600_000 // 10 min
+
+export async function fetchAirportActivity(
+  airportIcao: string,
+  hours = 24
+): Promise<AirportActivity | null> {
+  const cached = airportActivityCache.get(airportIcao)
+  if (cached && Date.now() - cached.ts < AIRPORT_ACTIVITY_CACHE_TTL) return cached.data
+
+  const base = MILITARY_AIRBASES.find(a => a.icao === airportIcao)
+  const airport = base || { icao: airportIcao, name: airportIcao, country: '' }
+
+  try {
+    const { headers } = await getOpenSkyAuth()
+    const end = Math.floor(Date.now() / 1000)
+    const begin = end - hours * 3600
+
+    const [arrRes, depRes] = await Promise.allSettled([
+      fetch(`${OPENSKY_API}/flights/arrival?airport=${airportIcao}&begin=${begin}&end=${end}`, {
+        signal: AbortSignal.timeout(10000), headers,
+      }),
+      fetch(`${OPENSKY_API}/flights/departure?airport=${airportIcao}&begin=${begin}&end=${end}`, {
+        signal: AbortSignal.timeout(10000), headers,
+      }),
+    ])
+
+    const parseFlights = async (result: PromiseSettledResult<Response>): Promise<FlightRecord[]> => {
+      if (result.status !== 'fulfilled' || !result.value.ok) return []
+      try {
+        const json = await result.value.json()
+        return (Array.isArray(json) ? json : []).map((f: any) => ({
+          icao24: f.icao24 || '',
+          callsign: (f.callsign || '').trim(),
+          firstSeen: f.firstSeen || 0,
+          lastSeen: f.lastSeen || 0,
+          estDepartureAirport: f.estDepartureAirport || null,
+          estArrivalAirport: f.estArrivalAirport || null,
+          estDepartureAirportHorizDistance: f.estDepartureAirportHorizDistance || 0,
+          estDepartureAirportVertDistance: f.estDepartureAirportVertDistance || 0,
+          estArrivalAirportHorizDistance: f.estArrivalAirportHorizDistance || 0,
+          estArrivalAirportVertDistance: f.estArrivalAirportVertDistance || 0,
+          departureAirportCandidatesCount: f.departureAirportCandidatesCount || 0,
+          arrivalAirportCandidatesCount: f.arrivalAirportCandidatesCount || 0,
+        }))
+      } catch { return [] }
+    }
+
+    const arrivals = await parseFlights(arrRes)
+    const departures = await parseFlights(depRes)
+
+    const activity: AirportActivity = {
+      airport,
+      arrivals,
+      departures,
+      totalMovements: arrivals.length + departures.length,
+    }
+
+    airportActivityCache.set(airportIcao, { data: activity, ts: Date.now() })
+    return activity
+  } catch (err) {
+    console.warn(`[OpenSky] Airport activity error for ${airportIcao}:`, err)
+    return null
+  }
+}
+
+/** Fetch activity for all monitored military airbases */
+export async function fetchAllMilitaryAirbaseActivity(hours = 24): Promise<AirportActivity[]> {
+  const results = await Promise.allSettled(
+    MILITARY_AIRBASES.map(base => fetchAirportActivity(base.icao, hours))
+  )
+  return results
+    .filter((r): r is PromiseFulfilledResult<AirportActivity | null> => r.status === 'fulfilled')
+    .map(r => r.value)
+    .filter((a): a is AirportActivity => a !== null)
+    .sort((a, b) => b.totalMovements - a.totalMovements)
+}
+
 // ── Conflict Events (via GDELT Event API) ──
 // ACLED requires paid API key; using GDELT event search instead (free, no auth)
 const SCRP_API = 'https://scrp-api.onrender.com'

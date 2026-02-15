@@ -1,12 +1,23 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plane, RefreshCw, Filter } from 'lucide-react'
-import { fetchLiveAircraft, fetchMilitaryAircraft, type Aircraft } from '../../lib/conflictApi'
+import { Plane, RefreshCw, Filter, Route, ChevronDown, ChevronUp } from 'lucide-react'
+import {
+  fetchLiveAircraft, fetchMilitaryAircraft, fetchAircraftTrack, fetchFlightsByAircraft,
+  type Aircraft, type AircraftTrack, type FlightRecord,
+} from '../../lib/conflictApi'
 
-export default function AircraftTracker() {
+interface AircraftTrackerProps {
+  onTrackSelect?: (track: AircraftTrack | null) => void
+}
+
+export default function AircraftTracker({ onTrackSelect }: AircraftTrackerProps) {
   const [aircraft, setAircraft] = useState<Aircraft[]>([])
   const [loading, setLoading] = useState(true)
   const [milOnly, setMilOnly] = useState(true)
   const [sortBy, setSortBy] = useState<'alt' | 'speed' | 'country'>('alt')
+  const [expandedIcao, setExpandedIcao] = useState<string | null>(null)
+  const [trackLoading, setTrackLoading] = useState(false)
+  const [flights, setFlights] = useState<FlightRecord[]>([])
+  const [flightsLoading, setFlightsLoading] = useState(false)
 
   const refresh = useCallback(async () => {
     try {
@@ -19,9 +30,36 @@ export default function AircraftTracker() {
   useEffect(() => {
     setLoading(true)
     refresh()
-    const iv = setInterval(refresh, 60_000) // 1 min — matches OpenSky cache TTL
+    const iv = setInterval(refresh, 60_000)
     return () => clearInterval(iv)
   }, [refresh])
+
+  const handleExpand = useCallback(async (icao24: string) => {
+    if (expandedIcao === icao24) {
+      setExpandedIcao(null)
+      onTrackSelect?.(null)
+      return
+    }
+
+    setExpandedIcao(icao24)
+    setFlights([])
+
+    // Fetch track for map display
+    setTrackLoading(true)
+    try {
+      const track = await fetchAircraftTrack(icao24)
+      onTrackSelect?.(track)
+    } catch { /* */ }
+    setTrackLoading(false)
+
+    // Fetch flight history
+    setFlightsLoading(true)
+    try {
+      const fl = await fetchFlightsByAircraft(icao24)
+      setFlights(fl)
+    } catch { /* */ }
+    setFlightsLoading(false)
+  }, [expandedIcao, onTrackSelect])
 
   const sorted = [...aircraft].sort((a, b) => {
     if (sortBy === 'alt') return (b.baroAltitude || 0) - (a.baroAltitude || 0)
@@ -38,6 +76,11 @@ export default function AircraftTracker() {
   const fmtSpeed = (ms: number | null) => {
     if (ms == null) return '—'
     return `${Math.round(ms * 1.944)} kts`
+  }
+
+  const fmtTime = (unix: number) => {
+    if (!unix) return '—'
+    return new Date(unix * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
   return (
@@ -94,30 +137,82 @@ export default function AircraftTracker() {
             <p className="text-[8px] text-samurai-steel/50">OpenSky may be rate-limited</p>
           </div>
         ) : (
-          sorted.slice(0, 50).map(a => (
-            <div key={a.icao24} className="bg-samurai-black rounded-md border border-samurai-grey-dark/30 px-2 py-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <Plane className="w-3 h-3 text-cyan-400 flex-shrink-0" style={{ transform: `rotate(${a.trueTrack || 0}deg)` }} />
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-bold text-white font-mono truncate">
-                      {a.callsign || a.icao24}
+          sorted.slice(0, 50).map(a => {
+            const isExpanded = expandedIcao === a.icao24
+            return (
+              <div key={a.icao24} className={`bg-samurai-black rounded-md border transition-colors ${isExpanded ? 'border-cyan-500/40' : 'border-samurai-grey-dark/30'}`}>
+                <button
+                  onClick={() => handleExpand(a.icao24)}
+                  className="w-full px-2 py-1.5 flex items-center justify-between gap-2 hover:bg-white/[0.02] transition-colors"
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Plane className="w-3 h-3 text-cyan-400 flex-shrink-0" style={{ transform: `rotate(${a.trueTrack || 0}deg)` }} />
+                    <div className="min-w-0 text-left">
+                      <div className="text-[10px] font-bold text-white font-mono truncate">
+                        {a.callsign || a.icao24}
+                      </div>
+                      <div className="text-[8px] text-samurai-steel truncate">{a.originCountry}</div>
                     </div>
-                    <div className="text-[8px] text-samurai-steel truncate">{a.originCountry}</div>
                   </div>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <div className="text-[10px] font-mono text-cyan-400">{fmtAlt(a.baroAltitude)}</div>
-                  <div className="text-[8px] font-mono text-samurai-steel">{fmtSpeed(a.velocity)}</div>
-                </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="text-right">
+                      <div className="text-[10px] font-mono text-cyan-400">{fmtAlt(a.baroAltitude)}</div>
+                      <div className="text-[8px] font-mono text-samurai-steel">{fmtSpeed(a.velocity)}</div>
+                    </div>
+                    {isExpanded ? <ChevronUp className="w-3 h-3 text-samurai-steel" /> : <ChevronDown className="w-3 h-3 text-samurai-steel/40" />}
+                  </div>
+                </button>
+
+                {/* Expanded detail panel */}
+                {isExpanded && (
+                  <div className="px-2 pb-2 border-t border-samurai-grey-dark/20 space-y-1.5">
+                    {/* ICAO + squawk */}
+                    <div className="flex items-center gap-3 pt-1.5 text-[8px] font-mono text-samurai-steel/60">
+                      <span>ICAO: {a.icao24}</span>
+                      {a.squawk && <span>SQK: {a.squawk}</span>}
+                      <span>CAT: {a.category}</span>
+                    </div>
+
+                    {/* Track status */}
+                    <div className="flex items-center gap-1 text-[8px] font-mono">
+                      <Route className="w-3 h-3 text-cyan-400/60" />
+                      {trackLoading ? (
+                        <span className="text-samurai-steel animate-pulse">Loading track...</span>
+                      ) : (
+                        <span className="text-cyan-400/60">Track drawn on map (if available)</span>
+                      )}
+                    </div>
+
+                    {/* Flight history */}
+                    <div className="text-[8px] font-mono">
+                      <div className="text-samurai-steel/70 mb-0.5">Recent Flights (48h):</div>
+                      {flightsLoading ? (
+                        <div className="text-samurai-steel/40 animate-pulse">Loading history...</div>
+                      ) : flights.length === 0 ? (
+                        <div className="text-samurai-steel/40">No flight records (batch-processed nightly)</div>
+                      ) : (
+                        <div className="space-y-0.5 max-h-[80px] overflow-y-auto">
+                          {flights.slice(0, 5).map((f, i) => (
+                            <div key={i} className="flex items-center gap-1 text-[7px]">
+                              <span className="text-cyan-400/80">{f.estDepartureAirport || '????'}</span>
+                              <span className="text-samurai-steel/40">→</span>
+                              <span className="text-cyan-400/80">{f.estArrivalAirport || '????'}</span>
+                              <span className="text-samurai-steel/30 ml-auto">{fmtTime(f.firstSeen)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          ))
+            )
+          })
         )}
       </div>
 
       <div className="text-[7px] text-samurai-steel/40 text-center font-mono">
-        OpenSky Network · Updates every 15s
+        OpenSky Network · Click aircraft for track + history
       </div>
     </div>
   )

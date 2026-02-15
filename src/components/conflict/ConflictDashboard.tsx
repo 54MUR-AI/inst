@@ -13,8 +13,9 @@ import ThreatAssessment from './ThreatAssessment'
 import NuclearThreatLevel from './NuclearThreatLevel'
 import CyberThreatFeed from './CyberThreatFeed'
 import VesselTracker from './VesselTracker'
+import AirbaseMonitor from './AirbaseMonitor'
 import type { GisLayer } from './GisOverlayManager'
-import type { Aircraft, ConflictEvent, Hotspot, CyberEvent, Vessel } from '../../lib/conflictApi'
+import type { Aircraft, ConflictEvent, Hotspot, CyberEvent, Vessel, AircraftTrack } from '../../lib/conflictApi'
 import { fetchMilitaryAircraft, fetchConflictEvents, fetchHotspots, fetchCyberNews, fetchVessels } from '../../lib/conflictApi'
 
 const ResponsiveGridLayout = WidthProvider(Responsive)
@@ -31,7 +32,8 @@ const CONFLICT_LAYOUTS: Layouts = {
     { i: 'hotspot-detection', x: 8, y: 14, w: 4, h: 6, minW: 3, minH: 4 },
     { i: 'defense-stocks', x: 0, y: 20, w: 4, h: 6, minW: 3, minH: 4 },
     { i: 'nuclear-threat', x: 4, y: 20, w: 4, h: 8, minW: 3, minH: 6 },
-    { i: 'gis-overlays', x: 8, y: 20, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'airbase-monitor', x: 8, y: 20, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'gis-overlays', x: 0, y: 26, w: 4, h: 6, minW: 3, minH: 4 },
   ],
   md: [
     { i: 'conflict-map', x: 0, y: 0, w: 8, h: 7, minW: 5, minH: 5 },
@@ -44,7 +46,8 @@ const CONFLICT_LAYOUTS: Layouts = {
     { i: 'hotspot-detection', x: 0, y: 25, w: 4, h: 6, minW: 3, minH: 4 },
     { i: 'defense-stocks', x: 4, y: 25, w: 4, h: 6, minW: 3, minH: 4 },
     { i: 'nuclear-threat', x: 0, y: 31, w: 4, h: 8, minW: 3, minH: 6 },
-    { i: 'gis-overlays', x: 4, y: 31, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'airbase-monitor', x: 4, y: 31, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'gis-overlays', x: 0, y: 37, w: 4, h: 6, minW: 3, minH: 4 },
   ],
   sm: [
     { i: 'conflict-map', x: 0, y: 0, w: 6, h: 6, minW: 4, minH: 5 },
@@ -57,12 +60,13 @@ const CONFLICT_LAYOUTS: Layouts = {
     { i: 'hotspot-detection', x: 0, y: 42, w: 6, h: 6, minW: 3, minH: 4 },
     { i: 'defense-stocks', x: 0, y: 48, w: 6, h: 6, minW: 3, minH: 4 },
     { i: 'nuclear-threat', x: 0, y: 54, w: 6, h: 8, minW: 3, minH: 6 },
-    { i: 'gis-overlays', x: 0, y: 62, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'airbase-monitor', x: 0, y: 62, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'gis-overlays', x: 0, y: 68, w: 6, h: 6, minW: 3, minH: 4 },
   ],
 }
 
 const LAYOUT_STORAGE_KEY = 'nsit-conflict-layouts'
-const LAYOUT_VERSION = 3 // bump when adding/removing widgets to force layout reset
+const LAYOUT_VERSION = 4 // bump when adding/removing widgets to force layout reset
 
 function loadConflictLayouts(): Layouts | null {
   try {
@@ -91,6 +95,7 @@ export default function ConflictDashboard() {
   const [hotspots, setHotspots] = useState<Hotspot[]>([])
   const [cyberEvents, setCyberEvents] = useState<CyberEvent[]>([])
   const [vessels, setVessels] = useState<Vessel[]>([])
+  const [activeTrack, setActiveTrack] = useState<AircraftTrack | null>(null)
   const [mapLayers, setMapLayers] = useState({ aircraft: true, events: true, hotspots: true, cyber: true, vessels: true })
 
   // Fetch data for the map
@@ -145,6 +150,7 @@ export default function ConflictDashboard() {
               hotspots={hotspots}
               cyberEvents={cyberEvents}
               vessels={vessels}
+              activeTrack={activeTrack}
               layers={mapLayers}
               onLayerToggle={handleLayerToggle}
             />
@@ -157,7 +163,7 @@ export default function ConflictDashboard() {
         </div>
         <div key="aircraft-tracker">
           <WidgetPanel title="Aircraft Tracker" icon="plane" live pipeline="opensky">
-            <AircraftTracker />
+            <AircraftTracker onTrackSelect={setActiveTrack} />
           </WidgetPanel>
         </div>
         <div key="conflict-events">
@@ -193,6 +199,11 @@ export default function ConflictDashboard() {
         <div key="cyber-threats">
           <WidgetPanel title="Cyber Threats" icon="shield" live pipeline="cve">
             <CyberThreatFeed />
+          </WidgetPanel>
+        </div>
+        <div key="airbase-monitor">
+          <WidgetPanel title="Airbase Monitor" icon="tower-control" live pipeline="opensky">
+            <AirbaseMonitor />
           </WidgetPanel>
         </div>
         <div key="gis-overlays">

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import type { Aircraft, ConflictEvent, Hotspot, CyberEvent, Vessel } from '../../lib/conflictApi'
+import type { Aircraft, ConflictEvent, Hotspot, CyberEvent, Vessel, AircraftTrack } from '../../lib/conflictApi'
 
 // Approximate country centroids for cyber event map markers
 const COUNTRY_COORDS: Record<string, [number, number]> = {
@@ -49,6 +49,7 @@ interface ConflictMapProps {
   hotspots: Hotspot[]
   cyberEvents?: CyberEvent[]
   vessels?: Vessel[]
+  activeTrack?: AircraftTrack | null
   layers: {
     aircraft: boolean
     events: boolean
@@ -86,7 +87,7 @@ const DARK_STYLE = {
   ],
 }
 
-export default function ConflictMap({ aircraft, events, hotspots, cyberEvents = [], vessels = [], layers, onBoundsChange, onLayerToggle }: ConflictMapProps) {
+export default function ConflictMap({ aircraft, events, hotspots, cyberEvents = [], vessels = [], activeTrack, layers, onBoundsChange, onLayerToggle }: ConflictMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const markersRef = useRef<maplibregl.Marker[]>([])
@@ -138,6 +139,89 @@ export default function ConflictMap({ aircraft, events, hotspots, cyberEvents = 
     markersRef.current.forEach(m => m.remove())
     markersRef.current = []
   }, [])
+
+  // Draw aircraft track polyline
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+
+    const SOURCE_ID = 'aircraft-track'
+    const LAYER_ID = 'aircraft-track-line'
+    const DOT_LAYER_ID = 'aircraft-track-dots'
+
+    // Remove existing track layers/source
+    if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID)
+    if (map.getLayer(DOT_LAYER_ID)) map.removeLayer(DOT_LAYER_ID)
+    if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID)
+
+    if (!activeTrack || activeTrack.path.length < 2) return
+
+    const coords = activeTrack.path
+      .filter(wp => wp.latitude != null && wp.longitude != null)
+      .map(wp => [wp.longitude!, wp.latitude!] as [number, number])
+
+    if (coords.length < 2) return
+
+    map.addSource(SOURCE_ID, {
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        properties: {},
+        geometry: { type: 'LineString', coordinates: coords },
+      },
+    })
+
+    map.addLayer({
+      id: LAYER_ID,
+      type: 'line',
+      source: SOURCE_ID,
+      paint: {
+        'line-color': '#00bcd4',
+        'line-width': 2.5,
+        'line-opacity': 0.7,
+        'line-dasharray': [2, 1],
+      },
+    })
+
+    // Add dots at waypoints
+    map.addSource(SOURCE_ID + '-pts', {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: coords.map(c => ({
+          type: 'Feature' as const,
+          properties: {},
+          geometry: { type: 'Point' as const, coordinates: c },
+        })),
+      },
+    })
+
+    map.addLayer({
+      id: DOT_LAYER_ID,
+      type: 'circle',
+      source: SOURCE_ID + '-pts',
+      paint: {
+        'circle-radius': 3,
+        'circle-color': '#00bcd4',
+        'circle-opacity': 0.5,
+      },
+    })
+
+    // Fit map to track bounds
+    const lngs = coords.map(c => c[0])
+    const lats = coords.map(c => c[1])
+    map.fitBounds(
+      [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+      { padding: 60, maxZoom: 10, duration: 800 }
+    )
+
+    return () => {
+      if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID)
+      if (map.getLayer(DOT_LAYER_ID)) map.removeLayer(DOT_LAYER_ID)
+      if (map.getSource(SOURCE_ID + '-pts')) map.removeSource(SOURCE_ID + '-pts')
+      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID)
+    }
+  }, [activeTrack, mapReady])
 
   // Update markers when data changes
   useEffect(() => {
