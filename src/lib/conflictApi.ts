@@ -71,8 +71,15 @@ export interface GdeltTension {
 }
 
 // ── OpenSky Network — Live Aircraft ──
+// Auth: OAuth2 Client Credentials flow (post-March 2025 accounts)
+//   LDGR Key Name = client_id, API Key = client_secret
+//   Token endpoint: POST auth.opensky-network.org/.../token
+//   Bearer token cached ~25min (expires at 30min)
+//   Falls back to Basic Auth for legacy accounts, then anonymous
+// Credit system: bounded area queries cost 1-4 credits vs 4 for global
 
 const OPENSKY_API = 'https://opensky-network.org/api'
+const OPENSKY_TOKEN_URL = 'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token'
 
 // Military ICAO24 hex ranges (partial — US, UK, NATO)
 const MILITARY_PREFIXES = [
@@ -89,6 +96,65 @@ function isMilitaryIcao(icao24: string): boolean {
   const lower = icao24.toLowerCase()
   return MILITARY_PREFIXES.some(p => lower.startsWith(p))
 }
+
+// OAuth2 token cache
+let openskyToken: { token: string; expiresAt: number } | null = null
+let openskyAuthMode: 'oauth2' | 'basic' | 'anon' = 'anon'
+
+/**
+ * Get a Bearer token via OAuth2 Client Credentials flow.
+ * Returns null if no LDGR key or token fetch fails.
+ */
+async function getOAuth2Token(clientId: string, clientSecret: string, forceRefresh = false): Promise<string | null> {
+  // Return cached token if still valid (refresh 5min before expiry)
+  if (!forceRefresh && openskyToken && Date.now() < openskyToken.expiresAt - 300_000) {
+    return openskyToken.token
+  }
+
+  try {
+    const body = new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: clientId,
+      client_secret: clientSecret,
+    })
+
+    const res = await fetch(OPENSKY_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+      signal: AbortSignal.timeout(10000),
+    })
+
+    if (!res.ok) {
+      console.warn(`[OpenSky] OAuth2 token request failed: ${res.status}`)
+      openskyToken = null
+      return null
+    }
+
+    const json = await res.json()
+    const token = json.access_token
+    const expiresIn = json.expires_in || 1800 // default 30min
+
+    openskyToken = {
+      token,
+      expiresAt: Date.now() + expiresIn * 1000,
+    }
+
+    return token
+  } catch (err) {
+    console.warn('[OpenSky] OAuth2 token fetch error:', err)
+    openskyToken = null
+    return null
+  }
+}
+
+// Default bounded regions for credit-efficient queries (1 credit each)
+// These cover major conflict/military activity zones
+const OPENSKY_REGIONS = [
+  { name: 'Europe', lamin: 35, lomin: -12, lamax: 72, lomax: 45 },
+  { name: 'Middle East', lamin: 12, lomin: 25, lamax: 42, lomax: 65 },
+  { name: 'East Asia', lamin: 20, lomin: 95, lamax: 50, lomax: 145 },
+]
 
 let aircraftCache: { data: Aircraft[]; ts: number } | null = null
 let openskyFailed = false
@@ -112,63 +178,185 @@ export function fetchLiveAircraft(bounds?: {
   return openskyInflight
 }
 
+/**
+ * Build Authorization header for OpenSky.
+ * Tries OAuth2 first (new accounts), falls back to Basic Auth (legacy), then anonymous.
+ */
+async function getOpenSkyAuth(): Promise<{ headers: Record<string, string>; usingKey: boolean }> {
+  const headers: Record<string, string> = {}
+  let usingKey = false
+
+  try {
+    const creds = await getApiKeyWithName('opensky')
+    if (creds) {
+      // Try OAuth2 Client Credentials flow first (post-March 2025 accounts)
+      const token = await getOAuth2Token(creds.keyName, creds.key)
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+        openskyAuthMode = 'oauth2'
+        usingKey = true
+      } else {
+        // Fallback to Basic Auth for legacy accounts
+        headers['Authorization'] = 'Basic ' + btoa(`${creds.keyName}:${creds.key}`)
+        openskyAuthMode = 'basic'
+        usingKey = true
+      }
+    } else {
+      openskyAuthMode = 'anon'
+    }
+  } catch {
+    openskyAuthMode = 'anon'
+  }
+
+  return { headers, usingKey }
+}
+
+/**
+ * Fetch a single OpenSky region. Returns Aircraft[], 'retry-auth' on 401, or 'error'.
+ */
+async function _fetchOpenSkyRegion(
+  bounds: { lamin: number; lomin: number; lamax: number; lomax: number } | undefined,
+  headers: Record<string, string>
+): Promise<Aircraft[] | 'retry-auth' | 'error'> {
+  let url = `${OPENSKY_API}/states/all`
+  if (bounds) {
+    url += `?lamin=${bounds.lamin}&lomin=${bounds.lomin}&lamax=${bounds.lamax}&lomax=${bounds.lomax}`
+  }
+
+  const res = await fetch(url, { signal: AbortSignal.timeout(15000), headers })
+
+  if (!res.ok) {
+    if (res.status === 401) return 'retry-auth'
+    if (res.status === 429) {
+      openskyFailed = true
+      openskyFailedAt = Date.now()
+      setPipelineState('opensky', 'rate-limited', `429 — ${openskyAuthMode} limit hit`)
+    }
+    return 'error'
+  }
+
+  const json = await res.json()
+  const states: any[][] = json.states || []
+
+  return states
+    .filter(s => s[5] != null && s[6] != null)
+    .map(s => ({
+      icao24: s[0],
+      callsign: (s[1] || '').trim(),
+      originCountry: s[2],
+      longitude: s[5],
+      latitude: s[6],
+      baroAltitude: s[7],
+      velocity: s[9],
+      trueTrack: s[10],
+      onGround: s[8],
+      squawk: s[14],
+      category: s[17] || 0,
+    }))
+}
+
+/**
+ * Handle a 401 by force-refreshing the OAuth2 token and returning new headers.
+ * Returns null if refresh fails (e.g. legacy account with wrong creds).
+ */
+async function _handleOpenSky401(
+  _oldHeaders: Record<string, string>
+): Promise<Record<string, string> | null> {
+  try {
+    const creds = await getApiKeyWithName('opensky')
+    if (!creds) return null
+
+    // Force refresh the token
+    openskyToken = null
+    const token = await getOAuth2Token(creds.keyName, creds.key, true)
+    if (token) {
+      return { 'Authorization': `Bearer ${token}` }
+    }
+
+    // If OAuth2 refresh failed, try Basic Auth
+    return { 'Authorization': 'Basic ' + btoa(`${creds.keyName}:${creds.key}`) }
+  } catch {
+    return null
+  }
+}
+
 async function _fetchLiveAircraftImpl(bounds?: {
   lamin: number; lomin: number; lamax: number; lomax: number
 }): Promise<Aircraft[]> {
   try {
-    let url = `${OPENSKY_API}/states/all`
-    if (bounds) {
-      url += `?lamin=${bounds.lamin}&lomin=${bounds.lomin}&lamax=${bounds.lamax}&lomax=${bounds.lomax}`
-    }
-
-    // Try to get OpenSky credentials from LDGR for authenticated requests (4x rate limit)
-    // Key Name = username (clientId), API Key = password
-    const headers: Record<string, string> = {}
-    let usingKey = false
-    try {
-      const creds = await getApiKeyWithName('opensky')
-      if (creds) {
-        headers['Authorization'] = 'Basic ' + btoa(`${creds.keyName}:${creds.key}`)
-        usingKey = true
-      }
-    } catch { /* no key available, use anonymous */ }
-
+    const { headers, usingKey } = await getOpenSkyAuth()
     setPipelineState('opensky', 'loading', undefined, usingKey)
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000), headers })
-    if (!res.ok) {
-      if (res.status === 429) {
-        openskyFailed = true
-        openskyFailedAt = Date.now()
-        setPipelineState('opensky', 'rate-limited', `429 — ${usingKey ? 'auth' : 'anon'} limit hit`)
+
+    let allAircraft: Aircraft[] = []
+
+    if (bounds) {
+      // Single bounded query (1-4 credits depending on area)
+      const result = await _fetchOpenSkyRegion(bounds, headers)
+      if (result === 'retry-auth') {
+        // 401 — token expired, force refresh and retry once
+        const retryResult = await _handleOpenSky401(headers)
+        if (retryResult) {
+          const r2 = await _fetchOpenSkyRegion(bounds, retryResult)
+          if (Array.isArray(r2)) allAircraft = r2
+        }
+      } else if (Array.isArray(result)) {
+        allAircraft = result
       } else {
-        setPipelineState('opensky', 'error', `HTTP ${res.status}`)
+        return aircraftCache?.data || []
       }
-      return aircraftCache?.data || []
+    } else if (usingKey) {
+      // Authenticated: fetch multiple regions for better credit efficiency
+      // 3 regions × 2 credits each = 6 credits vs 4 for global (but better coverage focus)
+      const regionResults = await Promise.allSettled(
+        OPENSKY_REGIONS.map(r => _fetchOpenSkyRegion(r, headers))
+      )
+
+      for (const r of regionResults) {
+        if (r.status === 'fulfilled') {
+          if (r.value === 'retry-auth') {
+            // Token expired mid-batch — refresh and re-fetch this region
+            const retryHeaders = await _handleOpenSky401(headers)
+            if (retryHeaders) {
+              // Re-fetch all regions with new token
+              const retryResults = await Promise.allSettled(
+                OPENSKY_REGIONS.map(reg => _fetchOpenSkyRegion(reg, retryHeaders))
+              )
+              allAircraft = []
+              for (const rr of retryResults) {
+                if (rr.status === 'fulfilled' && Array.isArray(rr.value)) {
+                  allAircraft.push(...rr.value)
+                }
+              }
+            }
+            break
+          } else if (Array.isArray(r.value)) {
+            allAircraft.push(...r.value)
+          }
+        }
+      }
+
+      // Deduplicate by icao24 (regions may overlap slightly)
+      const seen = new Set<string>()
+      allAircraft = allAircraft.filter(a => {
+        if (seen.has(a.icao24)) return false
+        seen.add(a.icao24)
+        return true
+      })
+    } else {
+      // Anonymous: single global query (4 credits, but no auth needed)
+      const result = await _fetchOpenSkyRegion(undefined, headers)
+      if (Array.isArray(result)) {
+        allAircraft = result
+      } else {
+        return aircraftCache?.data || []
+      }
     }
-
-    const json = await res.json()
-    const states: any[][] = json.states || []
-
-    const aircraft: Aircraft[] = states
-      .filter(s => s[5] != null && s[6] != null)
-      .map(s => ({
-        icao24: s[0],
-        callsign: (s[1] || '').trim(),
-        originCountry: s[2],
-        longitude: s[5],
-        latitude: s[6],
-        baroAltitude: s[7],
-        velocity: s[9],
-        trueTrack: s[10],
-        onGround: s[8],
-        squawk: s[14],
-        category: s[17] || 0,
-      }))
 
     openskyFailed = false
-    aircraftCache = { data: aircraft, ts: Date.now() }
-    setPipelineState('opensky', 'ok', `${aircraft.length} aircraft`, usingKey)
-    return aircraft
+    aircraftCache = { data: allAircraft, ts: Date.now() }
+    const authLabel = openskyAuthMode === 'oauth2' ? 'OAuth2' : openskyAuthMode === 'basic' ? 'Basic' : 'Anon'
+    setPipelineState('opensky', 'ok', `${allAircraft.length} aircraft · ${authLabel}`, usingKey)
+    return allAircraft
   } catch (err) {
     console.warn('[Conflict] OpenSky fetch failed:', err)
     setPipelineState('opensky', 'error', err instanceof Error ? err.message : 'Network error')

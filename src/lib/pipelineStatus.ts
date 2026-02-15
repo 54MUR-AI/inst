@@ -52,7 +52,7 @@ export function onPipelineChange(fn: () => void): () => void {
 
 /** Human-readable flavor text for each pipeline */
 export const PIPELINE_LABELS: Record<string, { name: string; free: string; premium: string }> = {
-  opensky:    { name: 'OpenSky Network',   free: 'Anonymous · 400 req/day',          premium: 'Authenticated · 4,000 req/day' },
+  opensky:    { name: 'OpenSky Network',   free: 'Anonymous · limited credits',      premium: 'OAuth2 · 4,000 credits/day' },
   coingecko:  { name: 'CoinGecko',         free: 'Free tier · 10-30 req/min',        premium: 'Pro API · 500 req/min' },
   yahoo:      { name: 'Yahoo Finance',     free: 'Public endpoint · rate limited',    premium: 'RapidAPI · higher limits' },
   fred:       { name: 'FRED',              free: 'No key · data unavailable',         premium: 'API key · 120 req/min' },
