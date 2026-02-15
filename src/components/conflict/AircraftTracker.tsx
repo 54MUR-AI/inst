@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plane, RefreshCw, Filter, Route, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plane, RefreshCw, Filter, Route } from 'lucide-react'
 import {
   fetchLiveAircraft, fetchMilitaryAircraft, fetchAircraftTrack, fetchFlightsByAircraft,
   type Aircraft, type AircraftTrack, type FlightRecord,
@@ -14,6 +14,7 @@ export default function AircraftTracker({ onTrackSelect }: AircraftTrackerProps)
   const [loading, setLoading] = useState(true)
   const [milOnly, setMilOnly] = useState(true)
   const [sortBy, setSortBy] = useState<'alt' | 'speed' | 'country'>('alt')
+  const [countryFilter, setCountryFilter] = useState<string>('all')
   const [expandedIcao, setExpandedIcao] = useState<string | null>(null)
   const [trackLoading, setTrackLoading] = useState(false)
   const [flights, setFlights] = useState<FlightRecord[]>([])
@@ -83,97 +84,130 @@ export default function AircraftTracker({ onTrackSelect }: AircraftTrackerProps)
     return new Date(unix * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
-  return (
-    <div className="h-full flex flex-col gap-1.5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <span className="text-[9px] text-samurai-steel font-mono">
-          {aircraft.length} AIRCRAFT · {milOnly ? 'MIL' : 'ALL'} · LIVE
-        </span>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setMilOnly(!milOnly)}
-            className={`p-1 rounded text-[8px] font-mono transition-colors ${milOnly ? 'bg-cyan-500/20 text-cyan-400' : 'bg-samurai-grey-dark text-samurai-steel'}`}
-            title="Toggle military filter"
-          >
-            <Filter className="w-3 h-3" />
-          </button>
-          <button
-            onClick={() => { setLoading(true); refresh() }}
-            disabled={loading}
-            className="p-1 rounded hover:bg-samurai-grey-dark transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw className={`w-3 h-3 text-samurai-steel ${loading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-      </div>
+  // Get unique countries for filter dropdown
+  const countries = [...new Set(aircraft.map(a => a.originCountry))].sort()
 
-      {/* Sort tabs */}
-      <div className="flex gap-1">
+  const filtered = countryFilter === 'all' ? sorted : sorted.filter(a => a.originCountry === countryFilter)
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Controls — matches VesselTracker layout */}
+      <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-samurai-grey-dark/30">
+        <button
+          onClick={() => setMilOnly(!milOnly)}
+          className={`text-[8px] font-mono px-1.5 py-0.5 rounded border transition-colors ${
+            milOnly ? 'border-red-500/50 text-red-400 bg-red-500/10' : 'border-samurai-grey-dark/50 text-samurai-steel'
+          }`}
+        >
+          <Filter className="w-2.5 h-2.5 inline mr-0.5" />
+          {milOnly ? 'MIL' : 'ALL'}
+        </button>
+
+        <select
+          value={countryFilter}
+          onChange={e => setCountryFilter(e.target.value)}
+          className="text-[8px] font-mono bg-samurai-black border border-samurai-grey-dark/50 text-samurai-steel rounded px-1 py-0.5 max-w-[80px]"
+        >
+          <option value="all">All Countries</option>
+          {countries.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+
         {(['alt', 'speed', 'country'] as const).map(s => (
           <button
             key={s}
             onClick={() => setSortBy(s)}
-            className={`text-[8px] font-mono px-2 py-0.5 rounded transition-colors ${
-              sortBy === s ? 'bg-cyan-500/20 text-cyan-400' : 'text-samurai-steel hover:text-white'
+            className={`text-[7px] font-mono px-1 py-0.5 rounded ${
+              sortBy === s ? 'text-cyan-400 bg-cyan-500/10' : 'text-samurai-steel/60'
             }`}
           >
-            {s === 'alt' ? 'ALTITUDE' : s === 'speed' ? 'SPEED' : 'COUNTRY'}
+            {s === 'alt' ? 'ALT' : s === 'speed' ? 'SPEED' : 'COUNTRY'}
           </button>
         ))}
+
+        <button
+          onClick={() => { setLoading(true); refresh() }}
+          disabled={loading}
+          className="ml-auto text-samurai-steel hover:text-white"
+        >
+          <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
-      {/* List */}
-      <div className="flex-1 overflow-y-auto space-y-1 pr-0.5">
+      {/* Stats bar */}
+      <div className="flex items-center gap-3 px-2 py-1 text-[8px] font-mono text-samurai-steel/70 border-b border-samurai-grey-dark/20">
+        <span>{filtered.length} aircraft</span>
+        <span>{filtered.filter(a => (a.baroAltitude || 0) > 10000).length} high alt</span>
+        <span>{filtered.filter(a => a.onGround).length} on ground</span>
+      </div>
+
+      {/* Aircraft list */}
+      <div className="flex-1 overflow-y-auto scrollbar-thin">
         {loading && aircraft.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <span className="text-[10px] text-samurai-steel animate-pulse font-mono">Scanning airspace...</span>
+          <div className="flex items-center justify-center h-full text-samurai-steel">
+            <Plane className="w-4 h-4 animate-pulse mr-2" />
+            <span className="text-[10px] font-mono">Scanning airspace...</span>
           </div>
-        ) : aircraft.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-2">
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-2 py-8">
             <Plane className="w-6 h-6 text-cyan-500/20" />
             <p className="text-[10px] text-samurai-steel">No aircraft detected</p>
             <p className="text-[8px] text-samurai-steel/50">OpenSky may be rate-limited</p>
           </div>
         ) : (
-          sorted.slice(0, 50).map(a => {
+          filtered.slice(0, 50).map(a => {
             const isExpanded = expandedIcao === a.icao24
             return (
-              <div key={a.icao24} className={`bg-samurai-black rounded-md border transition-colors ${isExpanded ? 'border-cyan-500/40' : 'border-samurai-grey-dark/30'}`}>
+              <div
+                key={a.icao24}
+                className="border-b border-samurai-grey-dark/10"
+              >
                 <button
                   onClick={() => handleExpand(a.icao24)}
-                  className="w-full px-2 py-1.5 flex items-center justify-between gap-2 hover:bg-white/[0.02] transition-colors"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-white/[0.02] transition-colors"
                 >
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <Plane className="w-3 h-3 text-cyan-400 flex-shrink-0" style={{ transform: `rotate(${a.trueTrack || 0}deg)` }} />
-                    <div className="min-w-0 text-left">
-                      <div className="text-[10px] font-bold text-white font-mono truncate">
+                  {/* Icon */}
+                  <div className="flex-shrink-0">
+                    <Plane className="w-3 h-3 text-cyan-400" style={{ transform: `rotate(${a.trueTrack || 0}deg)` }} />
+                  </div>
+
+                  {/* Name + details */}
+                  <div className="flex-1 min-w-0 text-left">
+                    <div className="flex items-center gap-1">
+                      <span className="text-[9px] font-mono text-white truncate font-medium">
                         {a.callsign || a.icao24}
-                      </div>
-                      <div className="text-[8px] text-samurai-steel truncate">{a.originCountry}</div>
+                      </span>
+                      {a.squawk && (
+                        <span className="text-[7px] font-mono text-samurai-steel/50 flex-shrink-0">
+                          {a.squawk}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-[7px] font-mono text-samurai-steel/60">
+                      <span className="text-cyan-400/70">{a.originCountry}</span>
+                      <span>{a.onGround ? 'Ground' : fmtAlt(a.baroAltitude)}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <div className="text-right">
-                      <div className="text-[10px] font-mono text-cyan-400">{fmtAlt(a.baroAltitude)}</div>
-                      <div className="text-[8px] font-mono text-samurai-steel">{fmtSpeed(a.velocity)}</div>
+
+                  {/* Speed + heading */}
+                  <div className="flex-shrink-0 text-right">
+                    <div className={`text-[9px] font-mono font-medium ${(a.velocity || 0) > 0 ? 'text-cyan-400' : 'text-samurai-steel/40'}`}>
+                      {fmtSpeed(a.velocity)}
                     </div>
-                    {isExpanded ? <ChevronUp className="w-3 h-3 text-samurai-steel" /> : <ChevronDown className="w-3 h-3 text-samurai-steel/40" />}
+                    <div className="text-[7px] font-mono text-samurai-steel/50">
+                      {a.trueTrack != null ? `${Math.round(a.trueTrack)}°` : '—'}
+                    </div>
                   </div>
                 </button>
 
                 {/* Expanded detail panel */}
                 {isExpanded && (
                   <div className="px-2 pb-2 border-t border-samurai-grey-dark/20 space-y-1.5">
-                    {/* ICAO + squawk */}
                     <div className="flex items-center gap-3 pt-1.5 text-[8px] font-mono text-samurai-steel/60">
                       <span>ICAO: {a.icao24}</span>
                       {a.squawk && <span>SQK: {a.squawk}</span>}
                       <span>CAT: {a.category}</span>
                     </div>
 
-                    {/* Track status */}
                     <div className="flex items-center gap-1 text-[8px] font-mono">
                       <Route className="w-3 h-3 text-cyan-400/60" />
                       {trackLoading ? (
@@ -183,7 +217,6 @@ export default function AircraftTracker({ onTrackSelect }: AircraftTrackerProps)
                       )}
                     </div>
 
-                    {/* Flight history */}
                     <div className="text-[8px] font-mono">
                       <div className="text-samurai-steel/70 mb-0.5">Recent Flights (48h):</div>
                       {flightsLoading ? (
@@ -209,10 +242,11 @@ export default function AircraftTracker({ onTrackSelect }: AircraftTrackerProps)
             )
           })
         )}
-      </div>
-
-      <div className="text-[7px] text-samurai-steel/40 text-center font-mono">
-        OpenSky Network · Click aircraft for track + history
+        {filtered.length > 50 && (
+          <div className="text-center text-[8px] font-mono text-samurai-steel/40 py-2">
+            Showing 50 of {filtered.length} aircraft
+          </div>
+        )}
       </div>
     </div>
   )

@@ -555,6 +555,15 @@ export async function fetchAirportActivity(
       }),
     ])
 
+    // Bail immediately on 429 so the sequential loop can stop
+    const check429 = (result: PromiseSettledResult<Response>) => {
+      if (result.status === 'fulfilled' && result.value.status === 429) {
+        throw new Error('OPENSKY_RATE_LIMITED')
+      }
+    }
+    check429(arrRes)
+    check429(depRes)
+
     const parseFlights = async (result: PromiseSettledResult<Response>): Promise<FlightRecord[]> => {
       if (result.status !== 'fulfilled' || !result.value.ok) return []
       try {
@@ -594,16 +603,37 @@ export async function fetchAirportActivity(
   }
 }
 
-/** Fetch activity for all monitored military airbases */
+/** Fetch activity for all monitored military airbases — sequential with delay to avoid 429 */
+let airbaseActivityAllCache: { data: AirportActivity[]; ts: number } | null = null
+const AIRBASE_ALL_CACHE_TTL = 600_000 // 10 min
+
 export async function fetchAllMilitaryAirbaseActivity(hours = 24): Promise<AirportActivity[]> {
-  const results = await Promise.allSettled(
-    MILITARY_AIRBASES.map(base => fetchAirportActivity(base.icao, hours))
-  )
-  return results
-    .filter((r): r is PromiseFulfilledResult<AirportActivity | null> => r.status === 'fulfilled')
-    .map(r => r.value)
-    .filter((a): a is AirportActivity => a !== null)
-    .sort((a, b) => b.totalMovements - a.totalMovements)
+  // Return cache if fresh
+  if (airbaseActivityAllCache && Date.now() - airbaseActivityAllCache.ts < AIRBASE_ALL_CACHE_TTL) {
+    return airbaseActivityAllCache.data
+  }
+
+  const results: AirportActivity[] = []
+  const delay = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+  for (const base of MILITARY_AIRBASES) {
+    try {
+      const activity = await fetchAirportActivity(base.icao, hours)
+      if (activity) results.push(activity)
+    } catch (err: any) {
+      // Stop immediately if rate-limited — no point hammering the API
+      if (err?.message === 'OPENSKY_RATE_LIMITED') {
+        console.warn('[OpenSky] Rate limited — stopping airbase activity fetch')
+        break
+      }
+    }
+    // 1.5s delay between bases to stay under rate limits
+    await delay(1500)
+  }
+
+  const sorted = results.sort((a, b) => b.totalMovements - a.totalMovements)
+  airbaseActivityAllCache = { data: sorted, ts: Date.now() }
+  return sorted
 }
 
 // ── Conflict Events (via GDELT Event API) ──
