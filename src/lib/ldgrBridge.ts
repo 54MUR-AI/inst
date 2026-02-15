@@ -154,7 +154,7 @@ export async function getApiKeyWithName(serviceName: string): Promise<{ key: str
       .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(1)
-      .single()
+      .maybeSingle()
 
     if (error || !data) return null
 
