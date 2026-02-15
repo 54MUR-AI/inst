@@ -1,7 +1,8 @@
 /**
- * Conflict data APIs — OpenSky, ACLED, NASA FIRMS, GDELT
+ * Conflict data APIs — OpenSky, AIS Vessels, ACLED, NASA FIRMS, GDELT
  * OpenSky supports authenticated requests via LDGR API key (username:password).
  * Authenticated users get 4x rate limit (4000 req/day vs 400).
+ * AIS vessel tracking uses Digitraffic (free) with optional premium AIS-Hub key.
  */
 
 import { getApiKeyWithName } from './ldgrBridge'
@@ -351,6 +352,270 @@ export async function fetchHotspots(options?: {
     setPipelineState('firms', 'error', err instanceof Error ? err.message : 'Network error')
     return firmsCache?.data || []
   }
+}
+
+// ── AIS Vessel Tracking (Digitraffic — free, no auth) ──
+// Finnish Transport Agency provides real-time AIS data for vessels worldwide
+// Premium: AIS-Hub key via LDGR for broader coverage
+
+const DIGITRAFFIC_AIS = 'https://meri.digitraffic.fi/api/ais/v1'
+
+export interface Vessel {
+  mmsi: number
+  name: string
+  shipType: number
+  shipTypeName: string
+  callSign: string
+  destination: string
+  latitude: number
+  longitude: number
+  sog: number       // speed over ground (knots)
+  cog: number       // course over ground (degrees)
+  heading: number
+  draught: number
+  length: number
+  width: number
+  navStatus: number
+  navStatusName: string
+  timestamp: number
+  flag: string
+}
+
+// AIS ship type codes → human-readable names
+const SHIP_TYPE_NAMES: Record<number, string> = {
+  0: 'Unknown',
+  20: 'Wing in Ground',
+  30: 'Fishing',
+  31: 'Towing',
+  32: 'Towing (large)',
+  33: 'Dredging',
+  34: 'Diving Ops',
+  35: 'Military Ops',
+  36: 'Sailing',
+  37: 'Pleasure Craft',
+  40: 'High Speed Craft',
+  50: 'Pilot Vessel',
+  51: 'SAR',
+  52: 'Tug',
+  53: 'Port Tender',
+  54: 'Anti-Pollution',
+  55: 'Law Enforcement',
+  58: 'Medical',
+  60: 'Passenger',
+  70: 'Cargo',
+  80: 'Tanker',
+  90: 'Other',
+}
+
+function getShipTypeName(code: number): string {
+  // Exact match
+  if (SHIP_TYPE_NAMES[code]) return SHIP_TYPE_NAMES[code]
+  // Range match (e.g. 60-69 = Passenger, 70-79 = Cargo, 80-89 = Tanker)
+  const decade = Math.floor(code / 10) * 10
+  return SHIP_TYPE_NAMES[decade] || 'Unknown'
+}
+
+const NAV_STATUS_NAMES: Record<number, string> = {
+  0: 'Under Way (Engine)',
+  1: 'At Anchor',
+  2: 'Not Under Command',
+  3: 'Restricted Maneuverability',
+  4: 'Constrained by Draught',
+  5: 'Moored',
+  6: 'Aground',
+  7: 'Engaged in Fishing',
+  8: 'Under Way (Sailing)',
+  11: 'Towing Astern',
+  12: 'Towing Alongside',
+  14: 'AIS-SART Active',
+  15: 'Undefined',
+}
+
+// Military-interest vessel types
+const MILITARY_SHIP_TYPES = new Set([35, 51, 55])
+
+let vesselCache: { data: Vessel[]; ts: number } | null = null
+let vesselFailed = false
+let vesselFailedAt = 0
+let vesselInflight: Promise<Vessel[]> | null = null
+const VESSEL_CACHE_TTL = 120_000 // 2 min
+const VESSEL_RETRY_BACKOFF = 120_000
+
+export function fetchVessels(): Promise<Vessel[]> {
+  // Inflight deduplication
+  if (vesselInflight) return vesselInflight
+  vesselInflight = _fetchVesselsImpl()
+  vesselInflight.finally(() => { vesselInflight = null })
+  return vesselInflight
+}
+
+async function _fetchVesselsImpl(): Promise<Vessel[]> {
+  // Return cache if fresh
+  if (vesselCache && Date.now() - vesselCache.ts < VESSEL_CACHE_TTL) {
+    return vesselCache.data
+  }
+
+  // Don't retry too soon after failure
+  if (vesselFailed && Date.now() - vesselFailedAt < VESSEL_RETRY_BACKOFF) {
+    return vesselCache?.data || []
+  }
+
+  try {
+    setPipelineState('ais', 'loading')
+
+    // Fetch vessel locations from Digitraffic
+    const res = await fetch(`${DIGITRAFFIC_AIS}/locations`, {
+      signal: AbortSignal.timeout(20000),
+      headers: { 'Accept': 'application/json', 'Digitraffic-User': 'NSIT/RMG' },
+    })
+
+    if (!res.ok) {
+      if (res.status === 429) {
+        setPipelineState('ais', 'rate-limited', 'Digitraffic rate limited')
+        vesselFailed = true
+        vesselFailedAt = Date.now()
+        return vesselCache?.data || []
+      }
+      throw new Error(`HTTP ${res.status}`)
+    }
+
+    const json = await res.json()
+    const features = json.features || []
+
+    // Also fetch vessel metadata for names (separate endpoint)
+    let metaMap = new Map<number, { name: string; callSign: string; destination: string; shipType: number; draught: number; length: number; width: number }>()
+    try {
+      const metaRes = await fetch(`${DIGITRAFFIC_AIS}/vessels`, {
+        signal: AbortSignal.timeout(15000),
+        headers: { 'Accept': 'application/json', 'Digitraffic-User': 'NSIT/RMG' },
+      })
+      if (metaRes.ok) {
+        const metaArr = await metaRes.json()
+        for (const v of metaArr) {
+          metaMap.set(v.mmsi, {
+            name: v.name || '',
+            callSign: v.callSign || '',
+            destination: v.destination || '',
+            shipType: v.shipType ?? 0,
+            draught: v.draught ?? 0,
+            length: v.referencePointA + v.referencePointB || 0,
+            width: v.referencePointC + v.referencePointD || 0,
+          })
+        }
+      }
+    } catch { /* metadata is optional, locations are enough */ }
+
+    const vessels: Vessel[] = features
+      .filter((f: any) => f.geometry?.coordinates)
+      .map((f: any) => {
+        const props = f.properties || {}
+        const [lng, lat] = f.geometry.coordinates
+        const mmsi = props.mmsi || 0
+        const meta = metaMap.get(mmsi)
+        const shipType = meta?.shipType ?? props.shipType ?? 0
+
+        return {
+          mmsi,
+          name: meta?.name || `MMSI ${mmsi}`,
+          shipType,
+          shipTypeName: getShipTypeName(shipType),
+          callSign: meta?.callSign || '',
+          destination: meta?.destination || '',
+          latitude: lat,
+          longitude: lng,
+          sog: props.sog ?? 0,
+          cog: props.cog ?? 0,
+          heading: props.heading ?? props.cog ?? 0,
+          draught: meta?.draught ?? 0,
+          length: meta?.length ?? 0,
+          width: meta?.width ?? 0,
+          navStatus: props.navStat ?? 15,
+          navStatusName: NAV_STATUS_NAMES[props.navStat] || 'Unknown',
+          timestamp: props.timestampExternal || Date.now(),
+          flag: mmsiToFlag(mmsi),
+        }
+      })
+      .filter((v: Vessel) => v.latitude !== 0 && v.longitude !== 0)
+
+    vesselFailed = false
+    vesselCache = { data: vessels, ts: Date.now() }
+    setPipelineState('ais', 'ok', `${vessels.length} vessels`)
+    return vessels
+  } catch (err) {
+    console.warn('[Conflict] AIS vessel fetch failed:', err)
+    vesselFailed = true
+    vesselFailedAt = Date.now()
+    setPipelineState('ais', 'error', err instanceof Error ? err.message : 'Network error')
+    return vesselCache?.data || []
+  }
+}
+
+/** Filter to military/government/SAR vessels */
+export async function fetchMilitaryVessels(): Promise<Vessel[]> {
+  const all = await fetchVessels()
+  return all.filter(v =>
+    MILITARY_SHIP_TYPES.has(v.shipType) ||
+    MILITARY_SHIP_TYPES.has(Math.floor(v.shipType / 10) * 10) ||
+    v.name.match(/navy|coast guard|patrol|military|warship/i) ||
+    v.shipTypeName === 'Military Ops' ||
+    v.shipTypeName === 'Law Enforcement' ||
+    v.shipTypeName === 'SAR'
+  )
+}
+
+/** Derive flag country from MMSI MID (Maritime Identification Digits) */
+function mmsiToFlag(mmsi: number): string {
+  const mid = Math.floor(mmsi / 1_000_000)
+  const MID_FLAGS: Record<number, string> = {
+    201: '🇦🇱', 202: '🇦🇩', 203: '🇦🇹', 204: '🇵🇹', 205: '🇧🇪', 206: '🇧🇾',
+    207: '🇧🇬', 209: '🇨🇾', 210: '🇨🇾', 211: '🇩🇪', 212: '🇨🇾', 213: '🇬🇪',
+    214: '🇲🇩', 215: '🇲🇹', 216: '🇦🇲', 218: '🇩🇪', 219: '🇩🇰', 220: '🇩🇰',
+    224: '🇪🇸', 225: '🇪🇸', 226: '🇫🇷', 227: '🇫🇷', 228: '🇫🇷', 229: '🇲🇹',
+    230: '🇫🇮', 231: '🇫🇴', 232: '🇬🇧', 233: '🇬🇧', 234: '🇬🇧', 235: '🇬🇧',
+    236: '🇬🇮', 237: '🇬🇷', 238: '🇭🇷', 239: '🇬🇷', 240: '🇬🇷', 241: '🇬🇷',
+    242: '🇲🇦', 243: '🇭🇺', 244: '🇳🇱', 245: '🇳🇱', 246: '🇳🇱', 247: '🇮🇹',
+    248: '🇲🇹', 249: '🇲🇹', 250: '🇮🇪', 251: '🇮🇸', 252: '🇱🇮', 253: '🇱🇺',
+    254: '🇲🇨', 255: '🇵🇹', 256: '🇲🇹', 257: '🇳🇴', 258: '🇳🇴', 259: '🇳🇴',
+    261: '🇵🇱', 263: '🇵🇹', 265: '🇸🇪', 266: '🇸🇪', 267: '🇸🇰', 268: '🇸🇲',
+    269: '🇨🇭', 270: '🇨🇿', 271: '🇹🇷', 272: '🇺🇦', 273: '🇷🇺', 274: '🇲🇰',
+    275: '🇱🇻', 276: '🇪🇪', 277: '🇱🇹', 278: '🇸🇮', 279: '🇷🇸',
+    301: '🇦🇮', 303: '🇺🇸', 304: '🇦🇬', 305: '🇦🇬', 306: '🇳🇱', 307: '🇳🇱',
+    308: '🇧🇸', 309: '🇧🇸', 310: '🇧🇲', 311: '🇧🇸', 312: '🇧🇿', 314: '🇧🇧',
+    316: '🇨🇦', 319: '🇰🇾', 321: '🇨🇷', 323: '🇨🇺', 325: '🇩🇲', 327: '🇩🇴',
+    329: '🇫🇷', 330: '🇬🇩', 332: '🇬🇹', 334: '🇭🇳', 336: '🇭🇹', 338: '🇺🇸',
+    339: '🇯🇲', 341: '🇰🇳', 343: '🇱🇨', 345: '🇲🇽', 347: '🇫🇷', 348: '🇳🇮',
+    350: '🇵🇦', 351: '🇵🇦', 352: '🇵🇦', 353: '🇵🇦', 354: '🇵🇦', 355: '🇵🇦',
+    356: '🇵🇦', 357: '🇵🇦', 358: '🇵🇷', 359: '🇸🇻', 361: '🇵🇲',
+    366: '🇺🇸', 367: '🇺🇸', 368: '🇺🇸', 369: '🇺🇸',
+    370: '🇵🇦', 371: '🇵🇦', 372: '🇵🇦', 373: '🇵🇦',
+    375: '🇻🇨', 376: '🇻🇨', 377: '🇻🇨', 378: '🇬🇧',
+    401: '🇦🇫', 403: '🇸🇦', 405: '🇧🇩', 408: '🇧🇭', 410: '🇧🇹', 412: '🇨🇳',
+    413: '🇨🇳', 414: '🇨🇳', 416: '🇹🇼', 417: '🇱🇰', 419: '🇮🇳', 422: '🇮🇷',
+    423: '🇦🇿', 425: '🇮🇶', 428: '🇮🇱', 431: '🇯🇵', 432: '🇯🇵',
+    440: '🇰🇷', 441: '🇰🇷', 443: '🇵🇸', 445: '🇰🇵', 447: '🇰🇼', 450: '🇱🇧',
+    455: '🇲🇻', 457: '🇲🇳', 459: '🇳🇵', 461: '🇴🇲', 463: '🇵🇰', 466: '🇶🇦',
+    468: '🇸🇾', 470: '🇦🇪', 472: '🇹🇯', 473: '🇾🇪', 475: '🇹🇲',
+    477: '🇭🇰', 478: '🇧🇦',
+    501: '🇫🇷', 503: '🇦🇺', 506: '🇲🇲', 508: '🇧🇳', 510: '🇫🇲', 511: '🇵🇼',
+    512: '🇳🇿', 514: '🇰🇭', 515: '🇰🇭', 516: '🇨🇽', 518: '🇨🇰', 520: '🇫🇯',
+    523: '🇨🇰', 525: '🇮🇩', 529: '🇰🇮', 531: '🇱🇦', 533: '🇲🇾', 536: '🇳🇷',
+    538: '🇲🇭', 540: '🇳🇨', 542: '🇳🇺', 544: '🇳🇷', 546: '🇫🇷',
+    548: '🇵🇭', 553: '🇵🇬', 555: '🇵🇳', 557: '🇸🇧', 559: '🇦🇸',
+    561: '🇼🇸', 563: '🇸🇬', 564: '🇸🇬', 565: '🇸🇬', 566: '🇸🇬', 567: '🇹🇭',
+    570: '🇹🇴', 572: '🇹🇻', 574: '🇻🇳', 576: '🇻🇺', 577: '🇻🇺', 578: '🇼🇫',
+    601: '🇿🇦', 603: '🇦🇴', 605: '🇩🇿', 607: '🇫🇷', 608: '🇬🇧', 609: '🇧🇮',
+    610: '🇧🇯', 611: '🇧🇼', 612: '🇨🇲', 613: '🇨🇬', 615: '🇨🇩', 616: '🇰🇲',
+    617: '🇨🇻', 618: '🇫🇷', 619: '🇨🇮', 620: '🇰🇲', 621: '🇩🇯', 622: '🇪🇬',
+    624: '🇪🇹', 625: '🇪🇷', 626: '🇬🇦', 627: '🇬🇭', 629: '🇬🇲', 630: '🇬🇼',
+    631: '🇬🇶', 632: '🇬🇳', 633: '🇧🇫', 634: '🇰🇪', 635: '🇫🇷', 636: '🇱🇷',
+    637: '🇱🇷', 638: '🇸🇸', 642: '🇱🇾', 644: '🇱🇸', 645: '🇲🇺', 647: '🇲🇬',
+    649: '🇲🇱', 650: '🇲🇿', 654: '🇲🇷', 655: '🇲🇼', 656: '🇳🇪', 657: '🇳🇬',
+    659: '🇳🇦', 660: '🇫🇷', 661: '🇷🇼', 662: '🇸🇹', 663: '🇸🇳', 664: '🇸🇨',
+    665: '🇸🇱', 666: '🇸🇴', 667: '🇸🇿', 668: '🇸🇩', 669: '🇸🇿', 670: '🇹🇩',
+    671: '🇹🇬', 672: '🇹🇳', 674: '🇹🇿', 675: '🇺🇬', 676: '🇨🇩', 677: '🇹🇿',
+    678: '🇿🇲', 679: '🇿🇼',
+  }
+  return MID_FLAGS[mid] || '🏴'
 }
 
 // ── GDELT — Global Tension & Conflict News ──

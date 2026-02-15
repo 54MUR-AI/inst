@@ -57,6 +57,7 @@ export const PIPELINE_LABELS: Record<string, { name: string; free: string; premi
   yahoo:      { name: 'Yahoo Finance',     free: 'Public endpoint · rate limited',    premium: 'RapidAPI · higher limits' },
   fred:       { name: 'FRED',              free: 'No key · data unavailable',         premium: 'API key · 120 req/min' },
   firms:      { name: 'NASA FIRMS',        free: 'Demo key · limited',               premium: 'Earthdata key · full access' },
+  ais:        { name: 'Digitraffic AIS',  free: 'Public · Baltic/Nordic focus',     premium: 'AIS-Hub · global coverage' },
   acled:      { name: 'ACLED',             free: 'Via GDELT proxy',                   premium: 'Direct API · full dataset' },
   gdelt:      { name: 'GDELT',             free: 'Public · no key needed',            premium: 'Public · no key needed' },
   cve:        { name: 'CIRCL CVE',         free: 'Public · no key needed',            premium: 'Public · no key needed' },

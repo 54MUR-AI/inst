@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import type { Aircraft, ConflictEvent, Hotspot, CyberEvent } from '../../lib/conflictApi'
+import type { Aircraft, ConflictEvent, Hotspot, CyberEvent, Vessel } from '../../lib/conflictApi'
 
 // Approximate country centroids for cyber event map markers
 const COUNTRY_COORDS: Record<string, [number, number]> = {
@@ -48,11 +48,13 @@ interface ConflictMapProps {
   events: ConflictEvent[]
   hotspots: Hotspot[]
   cyberEvents?: CyberEvent[]
+  vessels?: Vessel[]
   layers: {
     aircraft: boolean
     events: boolean
     hotspots: boolean
     cyber?: boolean
+    vessels?: boolean
   }
   onBoundsChange?: (bounds: { lamin: number; lomin: number; lamax: number; lomax: number }) => void
 }
@@ -83,7 +85,7 @@ const DARK_STYLE = {
   ],
 }
 
-export default function ConflictMap({ aircraft, events, hotspots, cyberEvents = [], layers, onBoundsChange }: ConflictMapProps) {
+export default function ConflictMap({ aircraft, events, hotspots, cyberEvents = [], vessels = [], layers, onBoundsChange }: ConflictMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const markersRef = useRef<maplibregl.Marker[]>([])
@@ -268,8 +270,50 @@ export default function ConflictMap({ aircraft, events, hotspots, cyberEvents = 
       })
     }
 
+    // Vessel markers
+    if (layers.vessels && vessels.length > 0) {
+      const VESSEL_TYPE_COLORS: Record<string, string> = {
+        'Military Ops': '#ef4444', 'Law Enforcement': '#f97316', 'SAR': '#eab308',
+        'Tanker': '#8b5cf6', 'Cargo': '#06b6d4', 'Passenger': '#22c55e',
+        'Fishing': '#64748b', 'Tug': '#a78bfa',
+      }
+
+      vessels.forEach(v => {
+        if (!v.latitude || !v.longitude) return
+        const color = VESSEL_TYPE_COLORS[v.shipTypeName] || '#0ea5e9'
+        const isMoving = v.sog > 0.5
+        const size = isMoving ? 10 : 7
+
+        const el = document.createElement('div')
+        el.className = 'conflict-marker vessel-marker'
+        // Ship-shaped SVG marker rotated to heading
+        el.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" stroke="${color}" stroke-width="1.5" style="transform:rotate(${v.heading || 0}deg);opacity:${isMoving ? 0.9 : 0.5}"><path d="M12 2L8 12H4L8 22H16L20 12H16L12 2Z"/></svg>`
+        el.title = `${v.flag} ${v.name} · ${v.shipTypeName} · ${v.sog > 0 ? v.sog.toFixed(1) + ' kts' : 'Stationary'}`
+
+        const popup = new maplibregl.Popup({ offset: 10, closeButton: false, className: 'nsit-popup' })
+          .setHTML(`
+            <div style="font-family:monospace;font-size:10px;color:#fff;background:#1a1a1a;padding:6px 8px;border:1px solid #333;border-radius:4px;max-width:220px;">
+              <div style="font-weight:bold;color:${color};">${v.flag} ${v.name}</div>
+              <div style="color:#888;">${v.shipTypeName}</div>
+              <div>Speed: ${v.sog > 0 ? v.sog.toFixed(1) + ' kts' : 'Stationary'}</div>
+              <div>Heading: ${v.heading >= 0 ? Math.round(v.heading) + '°' : '—'}</div>
+              <div>Status: ${v.navStatusName}</div>
+              ${v.destination ? `<div>Dest: ${v.destination}</div>` : ''}
+              ${v.callSign ? `<div style="color:#666;">Call: ${v.callSign}</div>` : ''}
+              <div style="color:#666;">MMSI: ${v.mmsi}</div>
+            </div>
+          `)
+
+        const marker = new maplibregl.Marker({ element: el })
+          .setLngLat([v.longitude, v.latitude])
+          .setPopup(popup)
+          .addTo(mapRef.current!)
+        newMarkers.push(marker)
+      })
+    }
+
     markersRef.current = newMarkers
-  }, [aircraft, events, hotspots, cyberEvents, layers, mapReady, clearMarkers])
+  }, [aircraft, events, hotspots, cyberEvents, vessels, layers, mapReady, clearMarkers])
 
   return (
     <div ref={containerRef} className="w-full h-full rounded-md overflow-hidden" style={{ minHeight: 300 }} />

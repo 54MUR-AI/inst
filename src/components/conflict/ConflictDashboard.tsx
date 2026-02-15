@@ -12,9 +12,10 @@ import GisOverlayManager from './GisOverlayManager'
 import ThreatAssessment from './ThreatAssessment'
 import NuclearThreatLevel from './NuclearThreatLevel'
 import CyberThreatFeed from './CyberThreatFeed'
+import VesselTracker from './VesselTracker'
 import type { GisLayer } from './GisOverlayManager'
-import type { Aircraft, ConflictEvent, Hotspot, CyberEvent } from '../../lib/conflictApi'
-import { fetchMilitaryAircraft, fetchConflictEvents, fetchHotspots, fetchCyberNews } from '../../lib/conflictApi'
+import type { Aircraft, ConflictEvent, Hotspot, CyberEvent, Vessel } from '../../lib/conflictApi'
+import { fetchMilitaryAircraft, fetchConflictEvents, fetchHotspots, fetchCyberNews, fetchVessels } from '../../lib/conflictApi'
 
 const ResponsiveGridLayout = WidthProvider(Responsive)
 
@@ -23,42 +24,45 @@ const CONFLICT_LAYOUTS: Layouts = {
     { i: 'conflict-map', x: 0, y: 0, w: 8, h: 8, minW: 6, minH: 6 },
     { i: 'threat-assessment', x: 8, y: 0, w: 4, h: 8, minW: 3, minH: 5 },
     { i: 'aircraft-tracker', x: 0, y: 8, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'conflict-events', x: 4, y: 8, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'conflict-news', x: 8, y: 8, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'cyber-threats', x: 0, y: 14, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'hotspot-detection', x: 4, y: 14, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'defense-stocks', x: 8, y: 14, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'nuclear-threat', x: 0, y: 20, w: 4, h: 8, minW: 3, minH: 6 },
-    { i: 'gis-overlays', x: 4, y: 20, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'vessel-tracker', x: 4, y: 8, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'conflict-events', x: 8, y: 8, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'conflict-news', x: 0, y: 14, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'cyber-threats', x: 4, y: 14, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'hotspot-detection', x: 8, y: 14, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'defense-stocks', x: 0, y: 20, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'nuclear-threat', x: 4, y: 20, w: 4, h: 8, minW: 3, minH: 6 },
+    { i: 'gis-overlays', x: 8, y: 20, w: 4, h: 6, minW: 3, minH: 4 },
   ],
   md: [
     { i: 'conflict-map', x: 0, y: 0, w: 8, h: 7, minW: 5, minH: 5 },
     { i: 'threat-assessment', x: 0, y: 7, w: 4, h: 6, minW: 3, minH: 5 },
     { i: 'aircraft-tracker', x: 4, y: 7, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'conflict-events', x: 0, y: 13, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'conflict-news', x: 4, y: 13, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'cyber-threats', x: 0, y: 19, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'hotspot-detection', x: 4, y: 19, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'defense-stocks', x: 0, y: 25, w: 4, h: 6, minW: 3, minH: 4 },
-    { i: 'nuclear-threat', x: 4, y: 25, w: 4, h: 8, minW: 3, minH: 6 },
-    { i: 'gis-overlays', x: 0, y: 33, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'vessel-tracker', x: 0, y: 13, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'conflict-events', x: 4, y: 13, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'conflict-news', x: 0, y: 19, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'cyber-threats', x: 4, y: 19, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'hotspot-detection', x: 0, y: 25, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'defense-stocks', x: 4, y: 25, w: 4, h: 6, minW: 3, minH: 4 },
+    { i: 'nuclear-threat', x: 0, y: 31, w: 4, h: 8, minW: 3, minH: 6 },
+    { i: 'gis-overlays', x: 4, y: 31, w: 4, h: 6, minW: 3, minH: 4 },
   ],
   sm: [
     { i: 'conflict-map', x: 0, y: 0, w: 6, h: 6, minW: 4, minH: 5 },
     { i: 'threat-assessment', x: 0, y: 6, w: 6, h: 6, minW: 3, minH: 5 },
     { i: 'aircraft-tracker', x: 0, y: 12, w: 6, h: 6, minW: 3, minH: 4 },
-    { i: 'conflict-events', x: 0, y: 18, w: 6, h: 6, minW: 3, minH: 4 },
-    { i: 'conflict-news', x: 0, y: 24, w: 6, h: 6, minW: 3, minH: 4 },
-    { i: 'cyber-threats', x: 0, y: 30, w: 6, h: 6, minW: 3, minH: 4 },
-    { i: 'hotspot-detection', x: 0, y: 36, w: 6, h: 6, minW: 3, minH: 4 },
-    { i: 'defense-stocks', x: 0, y: 42, w: 6, h: 6, minW: 3, minH: 4 },
-    { i: 'nuclear-threat', x: 0, y: 48, w: 6, h: 8, minW: 3, minH: 6 },
-    { i: 'gis-overlays', x: 0, y: 56, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'vessel-tracker', x: 0, y: 18, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'conflict-events', x: 0, y: 24, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'conflict-news', x: 0, y: 30, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'cyber-threats', x: 0, y: 36, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'hotspot-detection', x: 0, y: 42, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'defense-stocks', x: 0, y: 48, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'nuclear-threat', x: 0, y: 54, w: 6, h: 8, minW: 3, minH: 6 },
+    { i: 'gis-overlays', x: 0, y: 62, w: 6, h: 6, minW: 3, minH: 4 },
   ],
 }
 
 const LAYOUT_STORAGE_KEY = 'nsit-conflict-layouts'
-const LAYOUT_VERSION = 2 // bump when adding/removing widgets to force layout reset
+const LAYOUT_VERSION = 3 // bump when adding/removing widgets to force layout reset
 
 function loadConflictLayouts(): Layouts | null {
   try {
@@ -86,20 +90,23 @@ export default function ConflictDashboard() {
   const [events, setEvents] = useState<ConflictEvent[]>([])
   const [hotspots, setHotspots] = useState<Hotspot[]>([])
   const [cyberEvents, setCyberEvents] = useState<CyberEvent[]>([])
-  const [mapLayers, setMapLayers] = useState({ aircraft: true, events: true, hotspots: true, cyber: true })
+  const [vessels, setVessels] = useState<Vessel[]>([])
+  const [mapLayers, setMapLayers] = useState({ aircraft: true, events: true, hotspots: true, cyber: true, vessels: true })
 
   // Fetch data for the map
   const refreshMapData = useCallback(async () => {
-    const [ac, ev, hs, cy] = await Promise.allSettled([
+    const [ac, ev, hs, cy, vs] = await Promise.allSettled([
       fetchMilitaryAircraft(),
       fetchConflictEvents({ limit: 200 }),
       fetchHotspots(),
       fetchCyberNews(),
+      fetchVessels(),
     ])
     if (ac.status === 'fulfilled') setAircraft(ac.value)
     if (ev.status === 'fulfilled') setEvents(ev.value)
     if (hs.status === 'fulfilled') setHotspots(hs.value)
     if (cy.status === 'fulfilled') setCyberEvents(cy.value)
+    if (vs.status === 'fulfilled') setVessels(vs.value)
   }, [])
 
   useEffect(() => {
@@ -123,6 +130,7 @@ export default function ConflictDashboard() {
           { key: 'events' as const, label: 'Events', color: '#e63946' },
           { key: 'hotspots' as const, label: 'Hotspots', color: '#f97316' },
           { key: 'cyber' as const, label: 'Cyber', color: '#8b5cf6' },
+          { key: 'vessels' as const, label: 'Vessels', color: '#0ea5e9' },
         ]).map(l => (
           <button
             key={l.key}
@@ -157,6 +165,7 @@ export default function ConflictDashboard() {
               events={events}
               hotspots={hotspots}
               cyberEvents={cyberEvents}
+              vessels={vessels}
               layers={mapLayers}
             />
           </WidgetPanel>
@@ -194,6 +203,11 @@ export default function ConflictDashboard() {
         <div key="nuclear-threat">
           <WidgetPanel title="Nuclear Threat Level" icon="alert-triangle">
             <NuclearThreatLevel />
+          </WidgetPanel>
+        </div>
+        <div key="vessel-tracker">
+          <WidgetPanel title="Vessel Tracker" icon="ship" live pipeline="ais">
+            <VesselTracker />
           </WidgetPanel>
         </div>
         <div key="cyber-threats">
